@@ -1,11 +1,11 @@
 // Client for the /api/chat streaming endpoint.
 // Calls onToken(chunk) as text streams in; resolves with the full text.
 
-export async function streamChat({ messages, onToken, signal }) {
+export async function streamChat({ messages, model, image, onToken, signal }) {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, model, image }),
     signal,
   })
 

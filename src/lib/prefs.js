@@ -6,6 +6,7 @@ const DEFAULTS = {
   haptic: true,
   colorMode: 'System',
   fontStyle: 'Default',
+  model: 'meta/llama-3.3-70b-instruct',
 }
 
 function load() {

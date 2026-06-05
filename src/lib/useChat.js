@@ -10,7 +10,8 @@ import {
 
 /**
  * Drives sending a message in a thread (or creating one) and streaming the reply.
- * Returns { send, busy, error }.
+ * Accepts a string OR { text, image, model }.
+ * Returns { send, stop, busy, error }.
  */
 export function useChat() {
   const [busy, setBusy] = useState(false)
@@ -19,20 +20,28 @@ export function useChat() {
   const abortRef = useRef(null)
 
   const send = useCallback(
-    async (text, threadIdArg) => {
+    async (payload, threadIdArg) => {
+      const { text, image, model } =
+        typeof payload === 'string' ? { text: payload } : payload || {}
+
+      if (!text && !image) return
       setError(null)
       let threadId = threadIdArg
 
-      // Create a thread on first message from Home.
       if (!threadId) {
-        threadId = createThread(text)
+        threadId = createThread(text || 'Image')
         navigate(`/thread/${threadId}`)
       }
 
-      addMessage(threadId, { role: 'user', content: text })
+      addMessage(threadId, {
+        role: 'user',
+        content: text || '',
+        image: image || null,
+      })
       const assistantId = addMessage(threadId, {
         role: 'assistant',
         content: '',
+        model: model || null,
       })
 
       const history = (getThread(threadId)?.messages || [])
@@ -47,6 +56,8 @@ export function useChat() {
       try {
         await streamChat({
           messages: history,
+          model,
+          image,
           signal: controller.signal,
           onToken: (chunk) => {
             acc += chunk
@@ -54,11 +65,7 @@ export function useChat() {
           },
         })
         if (!acc.trim()) {
-          updateMessage(
-            threadId,
-            assistantId,
-            '_(No response received.)_'
-          )
+          updateMessage(threadId, assistantId, '_(No response received.)_')
         }
       } catch (err) {
         if (err.name === 'AbortError') {
@@ -81,9 +88,7 @@ export function useChat() {
     [navigate]
   )
 
-  const stop = useCallback(() => {
-    abortRef.current?.abort()
-  }, [])
+  const stop = useCallback(() => abortRef.current?.abort(), [])
 
   return { send, stop, busy, error }
 }

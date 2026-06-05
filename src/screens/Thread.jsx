@@ -31,6 +31,8 @@ export default function Thread() {
               key={m.id}
               role={m.role}
               content={m.content}
+              image={m.image}
+              model={m.model}
               streaming={
                 busy && idx === messages.length - 1 && m.role === 'assistant'
               }
@@ -56,7 +58,7 @@ export default function Thread() {
               </button>
             </div>
           )}
-          <Composer onSend={(t) => send(t, id)} disabled={busy} />
+          <Composer onSend={(p) => send(p, id)} disabled={busy} />
         </div>
       </div>
     </Layout>

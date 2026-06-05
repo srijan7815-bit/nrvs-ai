@@ -4,6 +4,7 @@ import Sunburst from '../components/Sunburst'
 import UpgradeBanner from '../components/UpgradeBanner'
 import { USER_NAME } from '../components/nav'
 import { useChat } from '../lib/useChat'
+import { usePrefs } from '../lib/prefs'
 
 function greeting() {
   const h = new Date().getHours()
@@ -21,6 +22,7 @@ const SUGGESTIONS = [
 
 export default function Home() {
   const { send, busy } = useChat()
+  const [prefs] = usePrefs()
 
   return (
     <Layout>
@@ -39,7 +41,7 @@ export default function Home() {
             {SUGGESTIONS.map((s) => (
               <button
                 key={s}
-                onClick={() => send(s)}
+                onClick={() => send({ text: s, model: prefs.model })}
                 disabled={busy}
                 className="card card-hover rounded-md px-4 py-3 text-left text-body-sm text-text-secondary disabled:opacity-50"
               >
@@ -50,7 +52,7 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-3xl pb-6">
-          <Composer onSend={(t) => send(t)} disabled={busy} />
+          <Composer onSend={(p) => send(p)} disabled={busy} />
         </div>
       </div>
     </Layout>

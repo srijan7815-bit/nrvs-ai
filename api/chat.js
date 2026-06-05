@@ -1,21 +1,27 @@
-// Vercel Serverless Function: POST /api/chat
+// Vercel Edge Function: POST /api/chat
 //
-// Streams an assistant reply back to the client as Server-Sent-Events style chunks.
+// Streams an assistant reply. Designed for NVIDIA's OpenAI-compatible API
+// (https://integrate.api.nvidia.com/v1) but works with any OpenAI-compatible endpoint.
 //
-// REAL AI:  set the env var OPENAI_API_KEY in the Vercel project settings.
-//           (Optionally OPENAI_MODEL, default "gpt-4o-mini", and OPENAI_BASE_URL.)
-// FALLBACK: if no key is configured, a built-in simulated assistant replies so the
-//           deployed site is fully functional out-of-the-box.
+// Env vars (set in Vercel → Settings → Environment Variables):
+//   OPENAI_API_KEY   (required for live mode)  e.g. nvapi-...
+//   OPENAI_BASE_URL  default https://integrate.api.nvidia.com/v1
+//   OPENAI_MODEL     fallback default model id
+//
+// Request body: { messages: [{role, content}], model?: string, image?: dataURL }
+// If no key is configured, a built-in simulated assistant replies so the site still works.
 
 export const config = { runtime: 'edge' }
 
 const SYSTEM_PROMPT =
-  'You are NRVS, a friendly, concise AI assistant. Use Markdown when helpful. Keep answers focused.'
+  'You are NRVS, a friendly, concise AI assistant. Use Markdown when helpful. Keep answers focused and clear.'
+
+const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
+const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
+const VISION_MODEL = 'meta/llama-3.2-11b-vision-instruct'
 
 export default async function handler(req) {
-  if (req.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405)
-  }
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   let body
   try {
@@ -25,60 +31,87 @@ export default async function handler(req) {
   }
 
   const messages = Array.isArray(body?.messages) ? body.messages : []
-  if (messages.length === 0) {
-    return json({ error: 'messages[] is required' }, 400)
-  }
+  if (messages.length === 0) return json({ error: 'messages[] is required' }, 400)
 
   const apiKey = process.env.OPENAI_API_KEY
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
-  const baseURL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+  const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
+  const image = typeof body?.image === 'string' ? body.image : null
 
-  // ── Real LLM path ──
-  if (apiKey) {
-    try {
-      const upstream = await fetch(`${baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            ...messages.map((m) => ({ role: m.role, content: m.content })),
-          ],
-        }),
-      })
+  // Pick model: image -> vision model; else requested model -> env default -> hardcoded default.
+  let model = image
+    ? VISION_MODEL
+    : body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
 
-      if (!upstream.ok || !upstream.body) {
-        const detail = await safeText(upstream)
-        return streamSimulated(
-          lastUserText(messages),
-          `\n\n_(LLM request failed: ${upstream.status}. Falling back to demo mode.)_`
-        )
-      }
+  // ── Simulated fallback (no key) ──
+  if (!apiKey) return streamSimulated(lastUserText(messages), '', model)
 
-      // Transform OpenAI SSE -> plain text token stream the client expects.
-      const stream = openAIToTextStream(upstream.body)
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'X-NRVS-Mode': 'live',
-        },
-      })
-    } catch (err) {
+  // Build the outgoing messages. If an image is present, attach it to the last user turn
+  // using the OpenAI vision content-array format.
+  const outMessages = buildMessages(messages, image)
+
+  try {
+    const upstream = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        temperature: 0.6,
+        top_p: 0.95,
+        max_tokens: 2048,
+        messages: outMessages,
+      }),
+    })
+
+    if (!upstream.ok || !upstream.body) {
+      const detail = (await safeText(upstream)).slice(0, 160)
       return streamSimulated(
         lastUserText(messages),
-        `\n\n_(LLM error. Falling back to demo mode.)_`
+        `\n\n_(Model "${model}" unavailable: ${upstream.status}. Showing demo response.)_`,
+        model
       )
     }
-  }
 
-  // ── Simulated fallback path ──
-  return streamSimulated(lastUserText(messages))
+    return new Response(openAIToTextStream(upstream.body), {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-NRVS-Mode': 'live',
+        'X-NRVS-Model': model,
+      },
+    })
+  } catch (err) {
+    return streamSimulated(
+      lastUserText(messages),
+      `\n\n_(Network error reaching the model. Showing demo response.)_`,
+      model
+    )
+  }
+}
+
+// ---------- message building ----------
+
+function buildMessages(messages, image) {
+  const mapped = messages.map((m) => ({ role: m.role, content: m.content }))
+  if (image && mapped.length) {
+    // attach image to the last user message
+    for (let i = mapped.length - 1; i >= 0; i--) {
+      if (mapped[i].role === 'user') {
+        mapped[i] = {
+          role: 'user',
+          content: [
+            { type: 'text', text: mapped[i].content || 'Describe / extract the text from this image.' },
+            { type: 'image_url', image_url: { url: image } },
+          ],
+        }
+        break
+      }
+    }
+  }
+  return [{ role: 'system', content: SYSTEM_PROMPT }, ...mapped]
 }
 
 // ---------- helpers ----------
@@ -105,14 +138,19 @@ function lastUserText(messages) {
   return ''
 }
 
+// Transform upstream OpenAI/NVIDIA SSE into a plain text stream.
+// Handles both `delta.content` and reasoning models' `delta.reasoning_content`.
 function openAIToTextStream(upstreamBody) {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   let buffer = ''
+  let emittedContent = false
+  let inThink = false
 
   return new ReadableStream({
     async start(controller) {
       const reader = upstreamBody.getReader()
+      const push = (s) => controller.enqueue(encoder.encode(s))
       try {
         while (true) {
           const { done, value } = await reader.read()
@@ -125,20 +163,40 @@ function openAIToTextStream(upstreamBody) {
             if (!trimmed.startsWith('data:')) continue
             const data = trimmed.slice(5).trim()
             if (data === '[DONE]') {
+              if (inThink) push('\n\n')
               controller.close()
               return
             }
             try {
               const parsed = JSON.parse(data)
-              const token = parsed?.choices?.[0]?.delta?.content
-              if (token) controller.enqueue(encoder.encode(token))
+              const delta = parsed?.choices?.[0]?.delta || {}
+              const content = delta.content
+              const reasoning = delta.reasoning_content || delta.reasoning
+
+              if (content) {
+                if (inThink) {
+                  push('_\n\n')
+                  inThink = false
+                }
+                emittedContent = true
+                push(content)
+              } else if (reasoning && !emittedContent) {
+                // surface reasoning as subtle italic "thinking" so reasoning-only
+                // models still show output.
+                if (!inThink) {
+                  push('_Thinking: ')
+                  inThink = true
+                }
+                push(reasoning)
+              }
             } catch {
-              /* ignore keep-alive / partial */
+              /* ignore keep-alive / partial chunk */
             }
           }
         }
-      } catch (e) {
-        // swallow
+        if (inThink) push('_')
+      } catch {
+        /* swallow */
       } finally {
         controller.close()
       }
@@ -146,8 +204,8 @@ function openAIToTextStream(upstreamBody) {
   })
 }
 
-// Build a believable demo answer and stream it word-by-word.
-function streamSimulated(userText, suffix = '') {
+// Demo answer streamed word-by-word.
+function streamSimulated(userText, suffix = '', model = '') {
   const encoder = new TextEncoder()
   const reply = buildDemoReply(userText) + suffix
   const tokens = reply.match(/\S+\s*/g) || [reply]
@@ -156,8 +214,7 @@ function streamSimulated(userText, suffix = '') {
     async start(controller) {
       for (const t of tokens) {
         controller.enqueue(encoder.encode(t))
-        // small delay to mimic streaming
-        await new Promise((r) => setTimeout(r, 18))
+        await new Promise((r) => setTimeout(r, 16))
       }
       controller.close()
     },
@@ -168,6 +225,7 @@ function streamSimulated(userText, suffix = '') {
       'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       'X-NRVS-Mode': 'demo',
+      'X-NRVS-Model': model,
     },
   })
 }
@@ -175,26 +233,17 @@ function streamSimulated(userText, suffix = '') {
 function buildDemoReply(userText) {
   const q = (userText || '').trim()
   const lower = q.toLowerCase()
-
   if (/^(hi|hello|hey|yo|howdy)\b/.test(lower)) {
-    return "Hey! I'm **NRVS**, your AI assistant. What can I help you build or figure out today?"
+    return "Hey! I'm **NRVS**. What can I help you with today?"
   }
   if (lower.includes('who are you') || lower.includes('what are you')) {
-    return "I'm **NRVS**, a demo AI assistant running on this site. Right now I'm in **demo mode** — add an `OPENAI_API_KEY` in the Vercel project settings to switch me to real responses."
-  }
-  if (lower.includes('how are you')) {
-    return "Running smoothly, thanks for asking! Ready whenever you are. 🙂"
-  }
-  if (lower.includes('joke')) {
-    return "Why do programmers prefer dark mode?\n\nBecause light attracts bugs. 🐛"
+    return "I'm **NRVS**, an AI assistant. I'm currently in **demo mode** — add an `OPENAI_API_KEY` (your NVIDIA `nvapi-…` key) in the Vercel project settings to enable real responses."
   }
   if (q.endsWith('?')) {
-    return `Great question.\n\nYou asked: _"${escapeMd(q)}"_\n\nThis is a **demo** response from the NRVS serverless function. To get real, grounded answers, set the \`OPENAI_API_KEY\` environment variable on Vercel and redeploy — the same endpoint will then stream live model output.`
+    return `Good question — you asked: _"${escapeMd(q)}"_\n\nThis is a **demo** response. Set \`OPENAI_API_KEY\` on Vercel to stream live NVIDIA model output through this same endpoint.`
   }
-  if (q.length === 0) {
-    return 'Say something and I’ll respond! (Currently in demo mode.)'
-  }
-  return `Here's what I understood:\n\n> ${escapeMd(q)}\n\nI'm currently in **demo mode**, so this is a simulated reply. Add an \`OPENAI_API_KEY\` in Vercel to enable real AI responses through this same \`/api/chat\` endpoint.`
+  if (!q) return 'Say something and I’ll respond! (Demo mode.)'
+  return `You said:\n\n> ${escapeMd(q)}\n\nI'm in **demo mode** right now. Add your NVIDIA API key in Vercel to enable real AI replies.`
 }
 
 function escapeMd(s) {
