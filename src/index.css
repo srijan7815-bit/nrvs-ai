@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0f0f0f;
+  color: #ffffff;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Slim, dark scrollbars to match the theme */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+
+@layer components {
+  /* Secondary / icon button (hover -> #2A2A2A) */
+  .btn-icon {
+    @apply flex items-center justify-center rounded-pill bg-surface border border-border text-text-primary transition-colors duration-200 ease-smooth;
+  }
+  .btn-icon:hover {
+    @apply bg-border;
+  }
+
+  /* Primary pill button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-pill bg-white text-black font-medium transition-opacity duration-200 ease-smooth;
+  }
+  .btn-primary:hover {
+    @apply opacity-90;
+  }
+
+  /* List row used in nav + settings (hover -> #2A2A2A) */
+  .nav-row {
+    @apply flex items-center gap-3 rounded-sm px-3 py-2.5 text-body text-text-secondary transition-colors duration-200 ease-smooth cursor-pointer;
+  }
+  .nav-row:hover {
+    @apply bg-border text-text-primary;
+  }
+  .nav-row.active {
+    @apply bg-surface2 text-text-primary;
+  }
+
+  /* Card (hover -> #202020) */
+  .card {
+    @apply rounded-md border border-border bg-surface transition-colors duration-200 ease-smooth;
+  }
+  .card-hover:hover {
+    @apply bg-surface2;
+  }
+}
