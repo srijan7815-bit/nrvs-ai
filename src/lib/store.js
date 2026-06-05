@@ -176,6 +176,12 @@ export async function addMessage(threadId, message) {
     if (error) throw error
     if (nextTitle) {
       supabase.from('threads').update({ title: nextTitle }).eq('id', threadId)
+    } else {
+      // keep Recents ordering fresh (no DB trigger needed)
+      supabase
+        .from('threads')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', threadId)
     }
     threads = threads.map((t) =>
       t.id === threadId
