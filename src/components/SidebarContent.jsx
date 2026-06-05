@@ -2,6 +2,8 @@ import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
 import { navItems, USER_INITIAL } from './nav'
 import { useThreads, deleteThread } from '../lib/store'
+import Wordmark from './Wordmark'
+import { useAuth } from '../lib/auth'
 
 /**
  * Shared sidebar body used by both the desktop fixed sidebar and the mobile overlay.
@@ -12,6 +14,8 @@ export default function SidebarContent({ onNavigate }) {
   const navigate = useNavigate()
   const params = useParams()
   const threads = useThreads()
+  const { user } = useAuth()
+  const initial = (user?.email || USER_INITIAL).charAt(0).toUpperCase()
 
   const go = (to) => {
     navigate(to)
@@ -22,11 +26,8 @@ export default function SidebarContent({ onNavigate }) {
     <div className="flex h-full flex-col">
       {/* Brand */}
       <div className="px-4 pt-5 pb-3">
-        <button
-          onClick={() => go('/')}
-          className="text-heading-md font-semibold tracking-tight text-text-primary"
-        >
-          NRVS
+        <button onClick={() => go('/')} aria-label="NRVS home">
+          <Wordmark className="text-2xl" />
         </button>
       </div>
 
@@ -107,7 +108,7 @@ export default function SidebarContent({ onNavigate }) {
           aria-label="Open settings"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-pill bg-surface2 text-body-sm font-medium text-text-primary ring-1 ring-border transition-colors duration-200 hover:bg-border"
         >
-          {USER_INITIAL}
+          {initial}
         </button>
         <button
           onClick={() => go('/')}

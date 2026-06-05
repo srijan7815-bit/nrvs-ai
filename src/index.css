@@ -42,6 +42,30 @@ body {
   scrollbar-color: #2a2a2a transparent;
 }
 
+/* Shimmering "thinking" text */
+@keyframes nrvs-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    #8a8a8a 0%,
+    #ffffff 20%,
+    #8a8a8a 40%,
+    #8a8a8a 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: nrvs-shimmer 2.2s linear infinite;
+}
+
 @layer components {
   /* Secondary / icon button (hover -> #2A2A2A) */
   .btn-icon {

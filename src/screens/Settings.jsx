@@ -18,7 +18,8 @@ import {
 import Toggle from '../components/Toggle'
 import Layout from '../components/Layout'
 import { usePrefs } from '../lib/prefs'
-import { getThreads, deleteThread } from '../lib/store'
+import { getThreads, deleteThread, clearLocal } from '../lib/store'
+import { useAuth } from '../lib/auth'
 
 function Row({ icon: Icon, label, sub, danger, right, onClick }) {
   return (
@@ -47,23 +48,28 @@ function Row({ icon: Icon, label, sub, danger, right, onClick }) {
 export default function Settings() {
   const navigate = useNavigate()
   const [prefs, setPref] = usePrefs()
+  const { user, cloud, signOut } = useAuth()
+  const email = user?.email || 'guest@nrvs.local'
 
-  const handleLogout = () => {
-    if (
-      window.confirm(
-        'Log out? This will clear your local threads and preferences on this device.'
-      )
-    ) {
-      getThreads()
-        .map((t) => t.id)
-        .forEach((id) => deleteThread(id))
+  const handleLogout = async () => {
+    const msg = cloud
+      ? 'Log out of your NRVS account on this device?'
+      : 'Exit guest mode? Your local threads on this device will be cleared.'
+    if (!window.confirm(msg)) return
+
+    if (cloud) {
+      await signOut()
+    } else {
+      // guest: wipe local data
+      clearLocal()
       try {
+        localStorage.removeItem('nrvs.guest')
         localStorage.removeItem('nrvs.prefs.v1')
       } catch {
         /* ignore */
       }
-      navigate('/')
     }
+    navigate('/login')
   }
 
   return (
@@ -83,11 +89,9 @@ export default function Settings() {
 
         {/* Account row */}
         <div className="card mb-4 flex items-center justify-between px-4 py-3">
-          <span className="text-body text-text-secondary">
-            nelbachira1975@gmail.com
-          </span>
-          <span className="rounded-pill border border-border px-3 py-1 text-body-sm text-text-secondary">
-            Free
+          <span className="truncate text-body text-text-secondary">{email}</span>
+          <span className="ml-2 shrink-0 rounded-pill border border-border px-3 py-1 text-body-sm text-text-secondary">
+            {cloud ? 'Free' : 'Guest'}
           </span>
         </div>
 
@@ -162,7 +166,7 @@ export default function Settings() {
         {/* Logout */}
         <Row
           icon={LogOut}
-          label="Log out"
+          label={cloud ? 'Log out' : 'Exit guest mode'}
           danger
           right={<span />}
           onClick={handleLogout}

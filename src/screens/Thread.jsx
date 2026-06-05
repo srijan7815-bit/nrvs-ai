@@ -4,6 +4,7 @@ import { Square } from 'lucide-react'
 import Layout from '../components/Layout'
 import Composer from '../components/Composer'
 import Message from '../components/Message'
+import Thinking from '../components/Thinking'
 import { useThread } from '../lib/store'
 import { useChat } from '../lib/useChat'
 
@@ -14,7 +15,13 @@ export default function Thread() {
   const bottomRef = useRef(null)
 
   const messages = thread?.messages || []
-  const lastId = messages[messages.length - 1]?.id
+  const lastMsg = messages[messages.length - 1]
+  const lastId = lastMsg?.id
+  // Show the "thinking" bubble while waiting for the first token of the assistant reply.
+  const showThinking =
+    busy &&
+    lastMsg?.role === 'assistant' &&
+    (!lastMsg.content || lastMsg.content.length === 0)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -26,18 +33,22 @@ export default function Thread() {
     <Layout>
       <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 sm:px-6">
         <div className="flex-1 space-y-6 overflow-y-auto py-6">
-          {messages.map((m, idx) => (
-            <Message
-              key={m.id}
-              role={m.role}
-              content={m.content}
-              image={m.image}
-              model={m.model}
-              streaming={
-                busy && idx === messages.length - 1 && m.role === 'assistant'
-              }
-            />
-          ))}
+          {messages.map((m, idx) => {
+            const isLast = idx === messages.length - 1
+            // Skip the empty assistant placeholder while the Thinking bubble is shown.
+            if (showThinking && isLast && m.role === 'assistant') return null
+            return (
+              <Message
+                key={m.id}
+                role={m.role}
+                content={m.content}
+                image={m.image}
+                model={m.model}
+                streaming={busy && isLast && m.role === 'assistant'}
+              />
+            )
+          })}
+          {showThinking && <Thinking />}
           {error && (
             <div className="rounded-md border border-danger/40 bg-danger/10 px-4 py-2 text-body-sm text-danger">
               {error}

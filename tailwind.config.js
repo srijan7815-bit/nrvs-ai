@@ -29,8 +29,8 @@ export default {
           'Arial',
           'sans-serif',
         ],
-        // Serif used for the big "Good afternoon" greeting in the screenshots
-        serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
+        // Serif used for the big "Good afternoon" greeting + NRVS wordmark
+        serif: ['"Playfair Display"', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
       },
       fontSize: {
         // ── Typography scale ──
