@@ -21,7 +21,7 @@ export default function Toggle({ checked, onChange, label }) {
       style={{
         width: 44,
         height: 24,
-        backgroundColor: checked ? '#4A90E2' : '#2A2A2A',
+        backgroundColor: checked ? '#4A90E2' : 'var(--c-border)',
         padding: 2,
       }}
     >

@@ -2,9 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root.theme-dark {
   color-scheme: dark;
   --app-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --c-bg: #0f0f0f;
+  --c-surface: #1a1a1a;
+  --c-surface2: #202020;
+  --c-border: #2a2a2a;
+  --c-text-primary: #ffffff;
+  --c-text-secondary: #b3b3b3;
+  --c-text-tertiary: #8a8a8a;
+}
+
+:root.theme-light {
+  color-scheme: light;
+  --c-bg: #ffffff;
+  --c-surface: #f6f6f7;
+  --c-surface2: #ececee;
+  --c-border: #e0e0e3;
+  --c-text-primary: #131316;
+  --c-text-secondary: #55555c;
+  --c-text-tertiary: #8a8a90;
 }
 
 html,
@@ -15,9 +34,10 @@ body,
 
 body {
   margin: 0;
-  background: #0f0f0f;
-  color: #ffffff;
+  background: var(--c-bg);
+  color: var(--c-text-primary);
   font-family: var(--app-font);
+  transition: background-color 0.2s ease, color 0.2s ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

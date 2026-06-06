@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   Brain,
+  KeyRound,
 } from 'lucide-react'
 import Toggle from '../components/Toggle'
 import Layout from '../components/Layout'
@@ -172,6 +173,7 @@ export default function Settings() {
           <Row icon={SlidersHorizontal} label="Capabilities" sub="Search, code, memory enabled" />
           <Row icon={Shield} label="Permissions" sub="Manage tool access" />
           <Row icon={Brain} label="Memory" sub="Manage what NRVS remembers" onClick={() => navigate('/memory')} />
+          <Row icon={KeyRound} label="Secrets" sub="API keys & tokens (synced, private)" onClick={() => navigate('/secrets')} />
         </div>
 
         {/* MCP servers (part of Capabilities) */}
@@ -273,21 +275,29 @@ export default function Settings() {
         {/* Preferences */}
         <SectionTitle>Preferences</SectionTitle>
         <div className="space-y-2">
-          <Row
-            icon={Sun}
-            label="Color mode"
-            sub={prefs.colorMode}
-            onClick={() =>
-              setPref(
-                'colorMode',
-                prefs.colorMode === 'System'
-                  ? 'Dark'
-                  : prefs.colorMode === 'Dark'
-                  ? 'Light'
-                  : 'System'
-              )
-            }
-          />
+          {/* Color mode segmented control */}
+          <div className="card flex items-center gap-3 px-4 py-3">
+            <Sun size={18} strokeWidth={1.75} className="text-text-secondary" />
+            <span className="flex-1 text-body text-text-primary">Color mode</span>
+            <div className="flex items-center rounded-pill border border-border bg-surface2 p-0.5">
+              {['System', 'Light', 'Dark'].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    haptic('select')
+                    setPref('colorMode', m)
+                  }}
+                  className={`rounded-pill px-3 py-1 text-caption transition-colors ${
+                    prefs.colorMode === m
+                      ? 'bg-border text-text-primary'
+                      : 'text-text-tertiary'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
           <Row icon={Mic} label="Voice" sub="Speech-to-text & read aloud" />
           <Row
             icon={Smartphone}

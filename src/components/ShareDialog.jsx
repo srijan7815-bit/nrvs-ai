@@ -66,7 +66,8 @@ export default function ShareDialog({ open, threadId, onClose }) {
             {!link ? (
               <>
                 <p className="mb-4 text-body-sm text-text-tertiary">
-                  Create a public link. Anyone with it can view this conversation.
+                  Create a public link. Anyone with it can <strong className="text-text-secondary">view</strong> this
+                  conversation — it’s always <strong className="text-text-secondary">read-only</strong>.
                 </p>
 
                 <div className="space-y-2">

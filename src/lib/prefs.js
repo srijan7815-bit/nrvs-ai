@@ -1,6 +1,7 @@
 // Tiny persisted preferences store for Settings toggles/selections.
 import { useCallback, useEffect, useState } from 'react'
 import { applyFont } from './fonts'
+import { applyTheme } from './theme'
 
 const KEY = 'nrvs.prefs.v1'
 const DEFAULTS = {
@@ -18,9 +19,11 @@ function load() {
   }
 }
 
-// Apply the saved font as early as possible (module load).
+// Apply the saved font + theme as early as possible (module load).
 try {
-  applyFont(load().fontId)
+  const p = load()
+  applyFont(p.fontId)
+  applyTheme(p.colorMode)
 } catch {
   /* ignore */
 }
@@ -35,6 +38,7 @@ export function usePrefs() {
       /* ignore */
     }
     applyFont(prefs.fontId)
+    applyTheme(prefs.colorMode)
   }, [prefs])
 
   const set = useCallback((key, value) => {

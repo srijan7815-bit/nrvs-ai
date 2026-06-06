@@ -67,6 +67,7 @@ export default function Thread() {
                 image={m.image}
                 model={m.model}
                 tools={m.tools}
+                threadId={id}
                 streaming={busy && isLast && m.role === 'assistant'}
               />
             )

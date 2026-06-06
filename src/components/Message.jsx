@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Volume2, VolumeX, Copy, Check, Brain, AppWindow } from 'lucide-react'
+import { Volume2, VolumeX, Copy, Check, Brain, AppWindow, BookmarkPlus } from 'lucide-react'
 import Markdown from '../lib/markdown.jsx'
 import Mark from './Mark'
 import ToolChips from './ToolChips'
@@ -9,12 +9,15 @@ import { modelLabel } from '../lib/models'
 import { speak, stopSpeaking, ttsSupported } from '../lib/speech'
 import { addMemory } from '../lib/memory'
 import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts'
+import { saveToLibrary } from '../lib/library'
+import { haptic } from '../lib/haptics'
 
-export default function Message({ role, content, image, model, tools, streaming, shared }) {
+export default function Message({ role, content, image, model, tools, streaming, shared, threadId }) {
   const isUser = role === 'user'
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [remembered, setRemembered] = useState(false)
+  const [saved, setSaved] = useState(false)
   const { openArtifact } = useArtifacts()
 
   // Detect a previewable web artifact in assistant messages.
@@ -57,12 +60,27 @@ export default function Message({ role, content, image, model, tools, streaming,
     setTimeout(() => setRemembered(false), 1800)
   }
 
+  const artifactTitle = () =>
+    blocks.find((b) => b.filename)?.filename || 'Preview'
+
   const onOpenArtifact = () => {
     openArtifact({
       type: 'html',
-      title: blocks.find((b) => b.filename)?.filename || 'Preview',
+      title: artifactTitle(),
       content: compileArtifact(blocks),
     })
+  }
+
+  const onSaveLibrary = async () => {
+    haptic('success')
+    await saveToLibrary({
+      title: artifactTitle(),
+      kind: 'html',
+      content: compileArtifact(blocks),
+      threadId,
+    })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1800)
   }
 
   return (
@@ -158,8 +176,36 @@ export default function Message({ role, content, image, model, tools, streaming,
               </div>
             )}
 
-            {/* Open artifact footer */}
-            {!streaming && hasPreviewable && (
+            {/* Artifact footer: open preview + save to library */}
+            {!streaming && hasPreviewable && !shared && (
+              <div className="mt-2 overflow-hidden rounded-md border border-border bg-surface2">
+                <button
+                  onClick={onOpenArtifact}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-border"
+                >
+                  <AppWindow size={16} className="text-accent-orange" />
+                  <span className="flex-1 text-body-sm text-text-primary">
+                    Open compiled preview
+                  </span>
+                  <span className="text-caption text-text-tertiary">Artifact →</span>
+                </button>
+                <button
+                  onClick={onSaveLibrary}
+                  className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left transition-colors hover:bg-border"
+                >
+                  {saved ? (
+                    <Check size={16} className="text-accent-blue" />
+                  ) : (
+                    <BookmarkPlus size={16} className="text-text-secondary" />
+                  )}
+                  <span className="flex-1 text-body-sm text-text-primary">
+                    {saved ? 'Saved to Library' : 'Save to Library'}
+                  </span>
+                </button>
+              </div>
+            )}
+            {/* shared view: read-only open preview */}
+            {!streaming && hasPreviewable && shared && (
               <button
                 onClick={onOpenArtifact}
                 className="mt-2 flex w-full items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2.5 text-left transition-colors hover:bg-border"
@@ -168,7 +214,6 @@ export default function Message({ role, content, image, model, tools, streaming,
                 <span className="flex-1 text-body-sm text-text-primary">
                   Open compiled preview
                 </span>
-                <span className="text-caption text-text-tertiary">Artifact →</span>
               </button>
             )}
           </>

@@ -9,11 +9,17 @@ import Login from './screens/Login'
 import Memory from './screens/Memory'
 import SharedLinks from './screens/SharedLinks'
 import SharedChat from './screens/SharedChat'
+import Library from './screens/Library'
+import Projects from './screens/Projects'
+import Secrets from './screens/Secrets'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
 import { initMemoryForUser } from './lib/memory'
 import { initProfile } from './lib/profile'
 import { initSharesForUser } from './lib/shares'
+import { initLibraryForUser } from './lib/library'
+import { initSecretsForUser } from './lib/secrets'
+import { initProjectsForUser } from './lib/projects'
 import NameSetup from './components/NameSetup'
 
 /** Returns true if the visitor explicitly chose guest mode. */
@@ -53,6 +59,9 @@ export default function App() {
     initMemoryForUser(id)
     initProfile(cloud ? user : null)
     initSharesForUser(id)
+    initLibraryForUser(id)
+    initSecretsForUser(id)
+    initProjectsForUser(id)
   }, [user?.id, loading, cloud])
 
   return (
@@ -88,10 +97,7 @@ export default function App() {
         path="/library"
         element={
           <Protected>
-            <Placeholder
-              title="Library"
-              subtitle="Your saved prompts, files, and references live here."
-            />
+            <Library />
           </Protected>
         }
       />
@@ -99,10 +105,7 @@ export default function App() {
         path="/projects"
         element={
           <Protected>
-            <Placeholder
-              title="Projects"
-              subtitle="Group related threads and artifacts into projects."
-            />
+            <Projects />
           </Protected>
         }
       />
@@ -110,10 +113,15 @@ export default function App() {
         path="/artifacts"
         element={
           <Protected>
-            <Placeholder
-              title="Artifacts"
-              subtitle="Generated documents, code, and assets appear here."
-            />
+            <Library />
+          </Protected>
+        }
+      />
+      <Route
+        path="/secrets"
+        element={
+          <Protected>
+            <Secrets />
           </Protected>
         }
       />

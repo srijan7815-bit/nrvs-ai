@@ -4,14 +4,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        // ── Design System: Colors (Dark) ──
-        bg: '#0F0F0F',
-        surface: '#1A1A1A',
-        surface2: '#202020',
-        border: '#2A2A2A',
-        'text-primary': '#FFFFFF',
-        'text-secondary': '#B3B3B3',
-        'text-tertiary': '#8A8A8A',
+        // Theme tokens reference CSS variables so Light/Dark/System can swap them.
+        bg: 'var(--c-bg)',
+        surface: 'var(--c-surface)',
+        surface2: 'var(--c-surface2)',
+        border: 'var(--c-border)',
+        'text-primary': 'var(--c-text-primary)',
+        'text-secondary': 'var(--c-text-secondary)',
+        'text-tertiary': 'var(--c-text-tertiary)',
         'accent-blue': '#4A90E2',
         'accent-orange': '#FF8A3D',
         danger: '#FF6B6B',
