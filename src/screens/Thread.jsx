@@ -15,7 +15,7 @@ import { syncLiveShares } from '../lib/shares'
 export default function Thread() {
   const { id } = useParams()
   const thread = useThread(id)
-  const { send, stop, editAndRetry, retry, busy, error } = useChat()
+  const { send, stop, editAndRetry, retry, busy, error } = useChat(id)
   const bottomRef = useRef(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [live, setLive] = useState(false)

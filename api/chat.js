@@ -218,7 +218,7 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
       stream: true,
       temperature: 0.6,
       top_p: 0.95,
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages,
     }),
   })
@@ -232,7 +232,20 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
   const decoder = new TextDecoder()
   let buffer = ''
   let emitted = false
-  let inThink = false
+  let reasoningBuf = ''
+
+  const finish = () => {
+    // Fallback: a reasoning model produced only chain-of-thought and no final
+    // answer (e.g. truncated). Surface a cleaned tail of the reasoning so the
+    // bubble isn't empty — never the raw "thinking" preamble.
+    if (!emitted && reasoningBuf.trim()) {
+      const cleaned = reasoningBuf
+        .split(/\n\n+/)
+        .filter(Boolean)
+        .slice(-1)[0] || reasoningBuf
+      res.write(cleaned.trim())
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
@@ -245,7 +258,7 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
       if (!t.startsWith('data:')) continue
       const data = t.slice(5).trim()
       if (data === '[DONE]') {
-        if (inThink) res.write('_\n\n')
+        finish()
         return
       }
       try {
@@ -253,26 +266,21 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
         const delta = parsed?.choices?.[0]?.delta || {}
         const content = delta.content
         const reasoning = delta.reasoning_content || delta.reasoning
+        // Reasoning models stream their chain-of-thought in `reasoning_content`.
+        // DISCARD it (buffer only for the empty-answer fallback) so it never
+        // leaks into the visible answer — only `content` is shown.
         if (content) {
-          if (inThink) {
-            res.write('_\n\n')
-            inThink = false
-          }
           emitted = true
           res.write(content)
-        } else if (reasoning && !emitted) {
-          if (!inThink) {
-            res.write('_Thinking: ')
-            inThink = true
-          }
-          res.write(reasoning)
+        } else if (reasoning) {
+          reasoningBuf += reasoning
         }
       } catch {
         /* ignore partials */
       }
     }
   }
-  if (inThink) res.write('_')
+  finish()
 }
 
 // ── helpers ──

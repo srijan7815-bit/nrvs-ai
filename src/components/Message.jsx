@@ -73,14 +73,23 @@ export default function Message({
     setTimeout(() => setRemembered(false), 1800)
   }
 
-  const artifactTitle = () =>
-    blocks.find((b) => b.filename)?.filename || 'Preview'
+  const fileCount = blocks.filter((b) => b.filename).length
+  const artifactTitle = () => {
+    const named = blocks.find((b) => b.filename)?.filename
+    if (fileCount > 1) return `Project (${blocks.length} files)`
+    return named || 'Preview'
+  }
 
   const onOpenArtifact = () => {
     openArtifact({
       type: 'html',
       title: artifactTitle(),
       content: compileArtifact(blocks),
+      files: blocks.map((b, i) => ({
+        name: b.filename || `${b.language || 'file'}-${i + 1}`,
+        language: b.language,
+        code: b.code,
+      })),
     })
   }
 
@@ -261,7 +270,9 @@ export default function Message({
                   <span className="flex-1 text-body-sm text-text-primary">
                     Open compiled preview
                   </span>
-                  <span className="text-caption text-text-tertiary">Artifact →</span>
+                  <span className="text-caption text-text-tertiary">
+                    {fileCount > 1 ? `${blocks.length} files →` : 'Artifact →'}
+                  </span>
                 </button>
                 <button
                   onClick={onSaveLibrary}

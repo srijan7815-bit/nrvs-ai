@@ -43,44 +43,87 @@ export function parseCodeBlocks(text) {
   return blocks
 }
 
-// Build a runnable HTML document from a set of code blocks (an "artifact").
-// If there's an HTML block, it's the base; CSS/JS blocks are injected.
-export function compileArtifact(blocks) {
-  const html = blocks.find((b) =>
-    ['html', 'htm'].includes((b.language || '').toLowerCase())
-  )
-  const css = blocks.filter((b) => (b.language || '').toLowerCase() === 'css')
-  const js = blocks.filter((b) =>
-    ['js', 'javascript'].includes((b.language || '').toLowerCase())
-  )
-  const svg = blocks.find((b) => (b.language || '').toLowerCase() === 'svg')
+const lang = (b) => (b.language || '').toLowerCase()
+const isHtml = (b) => ['html', 'htm'].includes(lang(b))
+const isCss = (b) => lang(b) === 'css'
+const isJs = (b) => ['js', 'javascript', 'jsx', 'mjs'].includes(lang(b))
+const isSvg = (b) => lang(b) === 'svg'
+const base = (name) => (name || '').split('/').pop()
 
-  if (svg && !html) {
+// Build a runnable HTML document from a set of code blocks (an "artifact").
+// - Picks the main HTML file (index.html preferred).
+// - Inlines <link rel=stylesheet href="x.css"> and <script src="y.js"> when a
+//   matching CSS/JS code block exists (so multi-file front-ends render fully).
+// - Injects any remaining CSS/JS blocks that weren't referenced.
+export function compileArtifact(blocks) {
+  const htmlBlocks = blocks.filter(isHtml)
+  const cssBlocks = blocks.filter(isCss)
+  const jsBlocks = blocks.filter(isJs)
+  const svg = blocks.find(isSvg)
+
+  // SVG-only artifact
+  if (svg && !htmlBlocks.length) {
     return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;display:grid;place-items:center;background:#0f0f0f}</style></head><body>${svg.code}</body></html>`
   }
 
-  let doc = html ? html.code : ''
-  if (!doc) {
-    // no full HTML doc; scaffold one
-    doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body></body></html>`
-  }
+  // Pick main HTML (prefer index.html)
+  const html =
+    htmlBlocks.find((b) => /index\.html?$/i.test(b.filename || '')) ||
+    htmlBlocks[0]
 
-  const styleTag = css.length
-    ? `<style>\n${css.map((c) => c.code).join('\n')}\n</style>`
+  let doc =
+    html?.code ||
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body></body></html>`
+
+  const usedCss = new Set()
+  const usedJs = new Set()
+
+  // Inline <link ... href="file.css">
+  doc = doc.replace(
+    /<link[^>]*href=["']([^"']+\.css)["'][^>]*>/gi,
+    (m, href) => {
+      const match = cssBlocks.find((c) => base(c.filename) === base(href))
+      if (match) {
+        usedCss.add(match)
+        return `<style>\n${match.code}\n</style>`
+      }
+      return '' // drop unresolved external link (won't load in sandbox)
+    }
+  )
+
+  // Inline <script src="file.js">
+  doc = doc.replace(
+    /<script[^>]*src=["']([^"']+\.[mc]?jsx?)["'][^>]*>\s*<\/script>/gi,
+    (m, src) => {
+      const match = jsBlocks.find((j) => base(j.filename) === base(src))
+      if (match) {
+        usedJs.add(match)
+        return `<script>\n${match.code}\n<\/script>`
+      }
+      return ''
+    }
+  )
+
+  // Inject any remaining (unreferenced) CSS/JS blocks.
+  const extraCss = cssBlocks.filter((c) => !usedCss.has(c))
+  const extraJs = jsBlocks.filter((j) => !usedJs.has(j))
+
+  const styleTag = extraCss.length
+    ? `<style>\n${extraCss.map((c) => c.code).join('\n')}\n</style>`
     : ''
-  const scriptTag = js.length
-    ? `<script>\n${js.map((j) => j.code).join('\n')}\n<\/script>`
+  const scriptTag = extraJs.length
+    ? `<script>\n${extraJs.map((j) => j.code).join('\n')}\n<\/script>`
     : ''
 
-  if (styleTag && doc.includes('</head>')) {
-    doc = doc.replace('</head>', `${styleTag}\n</head>`)
-  } else if (styleTag) {
-    doc = styleTag + doc
+  if (styleTag) {
+    doc = doc.includes('</head>')
+      ? doc.replace('</head>', `${styleTag}\n</head>`)
+      : styleTag + doc
   }
-  if (scriptTag && doc.includes('</body>')) {
-    doc = doc.replace('</body>', `${scriptTag}\n</body>`)
-  } else if (scriptTag) {
-    doc = doc + scriptTag
+  if (scriptTag) {
+    doc = doc.includes('</body>')
+      ? doc.replace('</body>', `${scriptTag}\n</body>`)
+      : doc + scriptTag
   }
   return doc
 }

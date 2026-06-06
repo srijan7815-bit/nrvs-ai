@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { streamChat, extractMemories } from './api'
 import {
@@ -13,16 +13,20 @@ import {
 import { memoryContext, getMemories, addMemory } from './memory'
 import { getServers } from './mcp'
 import { filesForProject } from './projects'
+import { setBusy, setError, useBusy } from './busy'
+
+// Abort controllers keyed by threadId so stop() works from any screen/instance.
+const controllers = new Map()
 
 /**
  * Sends a message + streams the reply, with tool activity, memory injection,
- * and automatic memory extraction. Works in cloud + guest modes.
+ * and automatic memory extraction. Busy/error state is GLOBAL (shared across
+ * screens) so the thinking animation shows even right after navigating to a
+ * freshly-created thread. Pass a threadId to scope busy to that thread.
  */
-export function useChat() {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+export function useChat(scopeThreadId) {
+  const { busy, error } = useBusy(scopeThreadId)
   const navigate = useNavigate()
-  const abortRef = useRef(null)
 
   const send = useCallback(
     async (payload, threadIdArg) => {
@@ -93,9 +97,9 @@ export function useChat() {
           .filter((s) => s.enabled)
           .map((s) => `${s.name} (${s.url})`)
 
-        setBusy(true)
+        setBusy(threadId, true)
         const controller = new AbortController()
-        abortRef.current = controller
+        controllers.set(threadId, controller)
         let acc = ''
         const toolEvents = []
 
@@ -136,11 +140,11 @@ export function useChat() {
             await persistMessageContent(assistantId, errText)
           }
         } finally {
-          setBusy(false)
-          abortRef.current = null
+          setBusy(threadId, false)
+          controllers.delete(threadId)
         }
       } catch (err) {
-        setBusy(false)
+        if (threadId) setBusy(threadId, false)
         setError(err.message || 'Failed to send message.')
       }
 
@@ -149,7 +153,10 @@ export function useChat() {
     [navigate]
   )
 
-  const stop = useCallback(() => abortRef.current?.abort(), [])
+  const stop = useCallback(() => {
+    if (scopeThreadId) controllers.get(scopeThreadId)?.abort()
+    else controllers.forEach((c) => c.abort())
+  }, [scopeThreadId])
 
   // Edit a user message: truncate from it (removing it + everything after) and
   // re-send the new text. Preserves the original image if any.

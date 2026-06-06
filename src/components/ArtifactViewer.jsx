@@ -1,18 +1,27 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Eye, Code2, ExternalLink, Copy, Check } from 'lucide-react'
+import { X, Eye, Code2, ExternalLink, Copy, Check, FileCode } from 'lucide-react'
 import { useArtifacts } from '../lib/artifacts'
 
 /**
- * Full-screen artifact panel: renders a live preview of compiled HTML in a
- * sandboxed iframe, with a Code tab, copy, and "open in new tab".
+ * Full-screen artifact panel.
+ * - Preview tab: compiled HTML in a sandboxed iframe.
+ * - Code tab: a file list (all generated files) + the selected file's source.
  */
 export default function ArtifactViewer() {
   const { artifact, closeArtifact } = useArtifacts()
   const [tab, setTab] = useState('preview')
   const [copied, setCopied] = useState(false)
+  const [activeFile, setActiveFile] = useState(0)
 
   const html = artifact?.content || ''
+  const files = artifact?.files || []
+
+  useEffect(() => {
+    setActiveFile(0)
+    setTab('preview')
+  }, [artifact])
+
   const blobUrl = useMemo(() => {
     if (!html) return null
     try {
@@ -22,9 +31,12 @@ export default function ArtifactViewer() {
     }
   }, [html])
 
+  const currentCode =
+    files.length > 0 ? files[activeFile]?.code || '' : html
+
   const onCopy = async () => {
     try {
-      await navigator.clipboard.writeText(html)
+      await navigator.clipboard.writeText(tab === 'code' ? currentCode : html)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -52,19 +64,16 @@ export default function ArtifactViewer() {
             className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-none border border-border bg-surface sm:rounded-lg"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-              <span className="truncate text-body font-medium text-text-primary">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+              <span className="min-w-0 flex-1 truncate text-body font-medium text-text-primary">
                 {artifact.title || 'Artifact'}
               </span>
               <div className="flex items-center gap-1">
-                {/* tabs */}
-                <div className="mr-2 flex items-center rounded-pill border border-border bg-surface2 p-0.5">
+                <div className="mr-1 flex items-center rounded-pill border border-border bg-surface2 p-0.5">
                   <button
                     onClick={() => setTab('preview')}
                     className={`flex items-center gap-1 rounded-pill px-3 py-1 text-caption transition-colors ${
-                      tab === 'preview'
-                        ? 'bg-border text-text-primary'
-                        : 'text-text-tertiary'
+                      tab === 'preview' ? 'bg-border text-text-primary' : 'text-text-tertiary'
                     }`}
                   >
                     <Eye size={13} /> Preview
@@ -72,19 +81,13 @@ export default function ArtifactViewer() {
                   <button
                     onClick={() => setTab('code')}
                     className={`flex items-center gap-1 rounded-pill px-3 py-1 text-caption transition-colors ${
-                      tab === 'code'
-                        ? 'bg-border text-text-primary'
-                        : 'text-text-tertiary'
+                      tab === 'code' ? 'bg-border text-text-primary' : 'text-text-tertiary'
                     }`}
                   >
-                    <Code2 size={13} /> Code
+                    <Code2 size={13} /> Code{files.length > 1 ? ` (${files.length})` : ''}
                   </button>
                 </div>
-                <button
-                  onClick={onCopy}
-                  className="btn-icon h-8 w-8"
-                  title="Copy code"
-                >
+                <button onClick={onCopy} className="btn-icon h-8 w-8" title="Copy">
                   {copied ? <Check size={15} /> : <Copy size={15} />}
                 </button>
                 {blobUrl && (
@@ -98,28 +101,48 @@ export default function ArtifactViewer() {
                     <ExternalLink size={15} />
                   </a>
                 )}
-                <button
-                  onClick={closeArtifact}
-                  className="btn-icon h-8 w-8"
-                  title="Close"
-                >
+                <button onClick={closeArtifact} className="btn-icon h-8 w-8" title="Close">
                   <X size={16} />
                 </button>
               </div>
             </div>
 
             {/* Body */}
-            <div className="min-h-0 flex-1 bg-bg">
+            <div className="flex min-h-0 flex-1 bg-bg">
               {tab === 'preview' ? (
                 <iframe
                   title="artifact-preview"
                   srcDoc={html}
-                  sandbox="allow-scripts allow-modals allow-forms"
+                  sandbox="allow-scripts allow-modals allow-forms allow-popups"
                   className="h-full w-full bg-white"
                 />
+              ) : files.length > 1 ? (
+                <>
+                  {/* File list */}
+                  <div className="w-44 shrink-0 overflow-y-auto border-r border-border bg-surface py-2">
+                    {files.map((f, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveFile(i)}
+                        className={`flex w-full items-center gap-1.5 px-3 py-2 text-left text-caption transition-colors ${
+                          i === activeFile
+                            ? 'bg-surface2 text-text-primary'
+                            : 'text-text-tertiary hover:bg-border hover:text-text-primary'
+                        }`}
+                        title={f.name}
+                      >
+                        <FileCode size={12} className="shrink-0" />
+                        <span className="min-w-0 flex-1 truncate font-mono">{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <pre className="min-w-0 flex-1 overflow-auto p-4 text-body-sm">
+                    <code className="font-mono text-text-primary">{currentCode}</code>
+                  </pre>
+                </>
               ) : (
-                <pre className="h-full overflow-auto p-4 text-body-sm">
-                  <code className="font-mono text-text-primary">{html}</code>
+                <pre className="h-full w-full overflow-auto p-4 text-body-sm">
+                  <code className="font-mono text-text-primary">{currentCode}</code>
                 </pre>
               )}
             </div>
