@@ -3,6 +3,7 @@ import {
   Library,
   FolderOpen,
   LayoutGrid,
+  Brain,
 } from 'lucide-react'
 
 /**
@@ -15,6 +16,7 @@ export const navItems = [
   { id: 'library', label: 'Library', icon: Library, to: '/library' },
   { id: 'projects', label: 'Projects', icon: FolderOpen, to: '/projects' },
   { id: 'artifacts', label: 'Artifacts', icon: LayoutGrid, to: '/artifacts' },
+  { id: 'memory', label: 'Memory', icon: Brain, to: '/memory' },
 ]
 
 export const MODEL_NAME = 'Sonnet 4.6'

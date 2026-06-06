@@ -1,18 +1,19 @@
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { streamChat } from './api'
+import { streamChat, extractMemories } from './api'
 import {
   addMessage,
   createThread,
   getThread,
   updateMessage,
+  setMessageTools,
   persistMessageContent,
 } from './store'
+import { memoryContext, getMemories, addMemory } from './memory'
 
 /**
- * Drives sending a message in a thread (or creating one) and streaming the reply.
- * Accepts a string OR { text, image, model }.
- * Works in both cloud (Supabase) and guest (localStorage) modes.
+ * Sends a message + streams the reply, with tool activity, memory injection,
+ * and automatic memory extraction. Works in cloud + guest modes.
  */
 export function useChat() {
   const [busy, setBusy] = useState(false)
@@ -50,25 +51,36 @@ export function useChat() {
           .filter((m) => m.id !== assistantId)
           .map((m) => ({ role: m.role, content: m.content }))
 
+        const memList = getMemories().map((m) => m.content)
+
         setBusy(true)
         const controller = new AbortController()
         abortRef.current = controller
         let acc = ''
+        const toolEvents = []
 
         try {
           await streamChat({
             messages: history,
             model,
             image,
+            memories: memList,
             signal: controller.signal,
             onToken: (chunk) => {
               acc += chunk
-              updateMessage(threadId, assistantId, acc) // in-memory, fast
+              updateMessage(threadId, assistantId, acc)
+            },
+            onTool: (evt) => {
+              toolEvents.push(evt)
+              setMessageTools(threadId, assistantId, [...toolEvents])
             },
           })
           const finalText = acc.trim() ? acc : '_(No response received.)_'
           updateMessage(threadId, assistantId, finalText)
           await persistMessageContent(assistantId, finalText)
+
+          // Auto-memory extraction (fire-and-forget, non-blocking).
+          autoRemember(threadId, assistantId)
         } catch (err) {
           if (err.name === 'AbortError') {
             const stopped = acc + '\n\n_(Stopped.)_'
@@ -97,4 +109,20 @@ export function useChat() {
   const stop = useCallback(() => abortRef.current?.abort(), [])
 
   return { send, stop, busy, error }
+}
+
+// Look at the latest user+assistant turn and quietly save any durable facts.
+async function autoRemember(threadId, assistantId) {
+  try {
+    const t = getThread(threadId)
+    if (!t) return
+    const recent = t.messages.slice(-4).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }))
+    const facts = await extractMemories(recent)
+    for (const f of facts) await addMemory(f, 'auto')
+  } catch {
+    /* ignore */
+  }
 }

@@ -6,8 +6,10 @@ import Thread from './screens/Thread'
 import Settings from './screens/Settings'
 import Placeholder from './screens/Placeholder'
 import Login from './screens/Login'
+import Memory from './screens/Memory'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
+import { initMemoryForUser } from './lib/memory'
 
 /** Returns true if the visitor explicitly chose guest mode. */
 function isGuest() {
@@ -41,7 +43,9 @@ export default function App() {
   // Keep the data store in sync with the signed-in user (or guest/local).
   useEffect(() => {
     if (loading) return
-    initStoreForUser(cloud ? user?.id ?? null : null)
+    const id = cloud ? user?.id ?? null : null
+    initStoreForUser(id)
+    initMemoryForUser(id)
   }, [user?.id, loading, cloud])
 
   return (
@@ -98,6 +102,14 @@ export default function App() {
               title="Artifacts"
               subtitle="Generated documents, code, and assets appear here."
             />
+          </Protected>
+        }
+      />
+      <Route
+        path="/memory"
+        element={
+          <Protected>
+            <Memory />
           </Protected>
         }
       />

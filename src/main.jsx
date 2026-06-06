@@ -3,13 +3,18 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { AuthProvider } from './lib/auth.jsx'
+import { ArtifactProvider } from './lib/artifacts.jsx'
+import ArtifactViewer from './components/ArtifactViewer.jsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <ArtifactProvider>
+          <App />
+          <ArtifactViewer />
+        </ArtifactProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

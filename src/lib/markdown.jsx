@@ -2,6 +2,7 @@
 // Supports: headings, bold, italic, inline code, code blocks, blockquotes,
 // unordered/ordered lists, links, and paragraphs.
 import React from 'react'
+import CodeBlock from '../components/CodeBlock'
 
 function renderInline(text, keyPrefix = 'i') {
   const nodes = []
@@ -69,9 +70,16 @@ export default function Markdown({ text }) {
   while (i < lines.length) {
     const line = lines[i]
 
-    // Code block
+    // Code block (with optional language:filename info string)
     if (line.trim().startsWith('```')) {
-      const lang = line.trim().slice(3)
+      const info = line.trim().slice(3).trim()
+      let language = info
+      let filename = null
+      if (info.includes(':')) {
+        const [l, f] = info.split(':')
+        language = l.trim()
+        filename = f.trim()
+      }
       const buf = []
       i++
       while (i < lines.length && !lines[i].trim().startsWith('```')) {
@@ -80,12 +88,12 @@ export default function Markdown({ text }) {
       }
       i++ // skip closing fence
       blocks.push(
-        <pre
+        <CodeBlock
           key={key++}
-          className="my-2 overflow-x-auto rounded-md border border-border bg-surface2 p-3 text-body-sm"
-        >
-          <code className="font-mono text-text-primary">{buf.join('\n')}</code>
-        </pre>
+          language={language || 'text'}
+          filename={filename}
+          code={buf.join('\n')}
+        />
       )
       continue
     }

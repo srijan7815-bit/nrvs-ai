@@ -1,17 +1,29 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Volume2, VolumeX, Copy, Check } from 'lucide-react'
+import { Volume2, VolumeX, Copy, Check, Brain, AppWindow } from 'lucide-react'
 import Markdown from '../lib/markdown.jsx'
 import Sunburst from './Sunburst'
+import ToolChips from './ToolChips'
 import { USER_INITIAL } from './nav'
 import { modelLabel } from '../lib/models'
 import { speak, stopSpeaking, ttsSupported } from '../lib/speech'
+import { addMemory } from '../lib/memory'
+import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts'
 
-/** A single chat message row. */
-export default function Message({ role, content, image, model, streaming }) {
+export default function Message({ role, content, image, model, tools, streaming }) {
   const isUser = role === 'user'
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [remembered, setRemembered] = useState(false)
+  const { openArtifact } = useArtifacts()
+
+  // Detect a previewable web artifact in assistant messages.
+  const blocks = !isUser ? parseCodeBlocks(content) : []
+  const hasPreviewable = blocks.some((b) =>
+    ['html', 'htm', 'css', 'js', 'javascript', 'svg'].includes(
+      (b.language || '').toLowerCase()
+    )
+  )
 
   const onSpeak = () => {
     if (speaking) {
@@ -21,7 +33,6 @@ export default function Message({ role, content, image, model, streaming }) {
     }
     speak(content)
     setSpeaking(true)
-    // poll for end
     const t = setInterval(() => {
       if (!window.speechSynthesis?.speaking) {
         setSpeaking(false)
@@ -40,6 +51,20 @@ export default function Message({ role, content, image, model, streaming }) {
     }
   }
 
+  const onRemember = async () => {
+    await addMemory(content, 'manual')
+    setRemembered(true)
+    setTimeout(() => setRemembered(false), 1800)
+  }
+
+  const onOpenArtifact = () => {
+    openArtifact({
+      type: 'html',
+      title: blocks.find((b) => b.filename)?.filename || 'Preview',
+      content: compileArtifact(blocks),
+    })
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -55,16 +80,35 @@ export default function Message({ role, content, image, model, streaming }) {
 
       <div className={isUser ? 'max-w-[80%]' : 'max-w-[85%] pt-1'}>
         {isUser ? (
-          <div className="rounded-lg rounded-tr-sm border border-border bg-surface2 px-4 py-2.5 text-body text-text-primary">
-            {image && (
-              <img
-                src={image}
-                alt="attachment"
-                className="mb-2 max-h-56 rounded-md border border-border object-contain"
-              />
+          <>
+            <div className="rounded-lg rounded-tr-sm border border-border bg-surface2 px-4 py-2.5 text-body text-text-primary">
+              {image && (
+                <img
+                  src={image}
+                  alt="attachment"
+                  className="mb-2 max-h-56 rounded-md border border-border object-contain"
+                />
+              )}
+              {content && <span className="whitespace-pre-wrap">{content}</span>}
+            </div>
+            {/* Memory save on user messages */}
+            {content && (
+              <div className="mt-1 flex justify-end">
+                <button
+                  onClick={onRemember}
+                  className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
+                    remembered
+                      ? 'text-accent-blue'
+                      : 'text-text-tertiary hover:text-text-primary'
+                  }`}
+                  title="Ask NRVS to remember this"
+                >
+                  {remembered ? <Check size={13} /> : <Brain size={13} />}
+                  {remembered ? 'Remembered' : 'Remember'}
+                </button>
+              </div>
             )}
-            {content && <span className="whitespace-pre-wrap">{content}</span>}
-          </div>
+          </>
         ) : (
           <>
             {model && (
@@ -72,16 +116,17 @@ export default function Message({ role, content, image, model, streaming }) {
                 {modelLabel(model)}
               </div>
             )}
+            <ToolChips tools={tools} />
             <Markdown text={content} />
             {streaming && (
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-text-tertiary align-middle" />
             )}
+
             {!streaming && content && (
               <div className="mt-2 flex items-center gap-1">
                 <button
                   onClick={onCopy}
                   className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-                  aria-label="Copy"
                   title="Copy"
                 >
                   {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -94,13 +139,37 @@ export default function Message({ role, content, image, model, streaming }) {
                         ? 'text-accent-blue'
                         : 'text-text-tertiary hover:text-text-primary'
                     }`}
-                    aria-label="Read aloud"
-                    title="Read aloud (text-to-speech)"
+                    title="Read aloud"
                   >
                     {speaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
                   </button>
                 )}
+                <button
+                  onClick={onRemember}
+                  className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
+                    remembered
+                      ? 'text-accent-blue'
+                      : 'text-text-tertiary hover:text-text-primary'
+                  }`}
+                  title="Remember this"
+                >
+                  {remembered ? <Check size={14} /> : <Brain size={14} />}
+                </button>
               </div>
+            )}
+
+            {/* Open artifact footer */}
+            {!streaming && hasPreviewable && (
+              <button
+                onClick={onOpenArtifact}
+                className="mt-2 flex w-full items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2.5 text-left transition-colors hover:bg-border"
+              >
+                <AppWindow size={16} className="text-accent-orange" />
+                <span className="flex-1 text-body-sm text-text-primary">
+                  Open compiled preview
+                </span>
+                <span className="text-caption text-text-tertiary">Artifact →</span>
+              </button>
             )}
           </>
         )}

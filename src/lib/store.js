@@ -229,6 +229,21 @@ export function updateMessage(threadId, msgId, content) {
   emit()
 }
 
+// Attach live tool-activity (search / code-run) to a message (in-memory only).
+export function setMessageTools(threadId, msgId, tools) {
+  threads = threads.map((t) =>
+    t.id === threadId
+      ? {
+          ...t,
+          messages: t.messages.map((m) =>
+            m.id === msgId ? { ...m, tools } : m
+          ),
+        }
+      : t
+  )
+  emit()
+}
+
 // Persist the final content of a message to the cloud once (call after streaming ends).
 export async function persistMessageContent(msgId, content) {
   if (userId && isCloudEnabled) {

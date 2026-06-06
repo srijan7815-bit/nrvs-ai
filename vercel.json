@@ -3,7 +3,10 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
+  "functions": {
+    "api/chat.js": { "maxDuration": 60 },
+    "api/run.js": { "maxDuration": 60 },
+    "api/memory-extract.js": { "maxDuration": 30 }
+  },
+  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }

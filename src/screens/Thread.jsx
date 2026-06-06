@@ -17,11 +17,12 @@ export default function Thread() {
   const messages = thread?.messages || []
   const lastMsg = messages[messages.length - 1]
   const lastId = lastMsg?.id
-  // Show the "thinking" bubble while waiting for the first token of the assistant reply.
-  const showThinking =
-    busy &&
+  // Show the "thinking" bubble while waiting for the first token / tool activity.
+  const lastEmpty =
     lastMsg?.role === 'assistant' &&
     (!lastMsg.content || lastMsg.content.length === 0)
+  const lastHasTools = lastMsg?.tools && lastMsg.tools.length > 0
+  const showThinking = busy && lastEmpty && !lastHasTools
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -35,8 +36,9 @@ export default function Thread() {
         <div className="flex-1 space-y-6 overflow-y-auto py-6">
           {messages.map((m, idx) => {
             const isLast = idx === messages.length - 1
-            // Skip the empty assistant placeholder while the Thinking bubble is shown.
+            // Skip the empty assistant placeholder ONLY while the Thinking bubble shows.
             if (showThinking && isLast && m.role === 'assistant') return null
+            // While streaming with no content yet but tools active, still render (shows chips).
             return (
               <Message
                 key={m.id}
@@ -44,6 +46,7 @@ export default function Thread() {
                 content={m.content}
                 image={m.image}
                 model={m.model}
+                tools={m.tools}
                 streaming={busy && isLast && m.role === 'assistant'}
               />
             )
