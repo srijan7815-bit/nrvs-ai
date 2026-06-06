@@ -96,13 +96,22 @@ export default async function handler(req, res) {
     ...buildMessages(messages, image),
   ]
 
+  // Keep-alive: flush a leading byte immediately so the gateway never 504s
+  // while the (non-streaming) tool-decision round runs. A leading newline is
+  // harmless and trimmed/ignored by the client renderer.
+  res.write(' ')
+  if (typeof res.flush === 'function') res.flush()
+
   try {
-    // Tool loop: up to 4 rounds of tool calls before final streamed answer.
-    for (let round = 0; round < 4; round++) {
+    // Tool loop: up to 3 rounds of tool calls before final streamed answer.
+    // The decision round is capped to a SMALL max_tokens — it only needs to
+    // decide whether to call a tool, not write the full answer.
+    for (let round = 0; round < 3; round++) {
       if (!toolsEnabled) break
       const decision = await callModel(baseURL, apiKey, model, convo, {
         stream: false,
         tools: TOOL_DEFINITIONS,
+        maxTokens: 512,
       })
       const msg = decision?.choices?.[0]?.message
       const toolCalls = msg?.tool_calls
@@ -160,7 +169,7 @@ export default async function handler(req, res) {
 
 // ── model calls ──
 
-async function callModel(baseURL, apiKey, model, messages, { stream, tools }) {
+async function callModel(baseURL, apiKey, model, messages, { stream, tools, maxTokens }) {
   const r = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -172,7 +181,7 @@ async function callModel(baseURL, apiKey, model, messages, { stream, tools }) {
       stream: !!stream,
       temperature: 0.6,
       top_p: 0.95,
-      max_tokens: 2048,
+      max_tokens: maxTokens || 2048,
       messages,
       ...(tools ? { tools, tool_choice: 'auto' } : {}),
     }),

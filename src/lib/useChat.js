@@ -109,13 +109,15 @@ export function useChat() {
             signal: controller.signal,
             onToken: (chunk) => {
               acc += chunk
-              updateMessage(threadId, assistantId, acc)
+              // trim the leading keep-alive whitespace so it never shows
+              updateMessage(threadId, assistantId, acc.replace(/^\s+/, ''))
             },
             onTool: (evt) => {
               toolEvents.push(evt)
               setMessageTools(threadId, assistantId, [...toolEvents])
             },
           })
+          acc = acc.replace(/^\s+/, '')
           const finalText = acc.trim() ? acc : '_(No response received.)_'
           updateMessage(threadId, assistantId, finalText)
           await persistMessageContent(assistantId, finalText)
