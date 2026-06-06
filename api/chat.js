@@ -12,7 +12,6 @@
 
 import { webSearch, runCode, TOOL_DEFINITIONS } from './_tools.js'
 
-export const config = { runtime: 'nodejs' }
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'

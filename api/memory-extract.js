@@ -2,7 +2,6 @@
 // NRVS auto-extracts durable, useful facts about the user worth remembering.
 // Returns [] when nothing notable. Uses a fast model + strict JSON instruction.
 
-export const config = { runtime: 'nodejs' }
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const EXTRACT_MODEL = 'meta/llama-3.1-8b-instruct'

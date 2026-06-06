@@ -2,7 +2,6 @@
 // Executes a code block in an E2B sandbox (used by the "Run" button on code blocks).
 import { runCode } from './_tools.js'
 
-export const config = { runtime: 'nodejs' }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

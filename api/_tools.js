@@ -1,7 +1,7 @@
 // Server-side tool implementations: web search (Tavily) + code execution (E2B).
 // Used by /api/chat's tool-calling loop and by direct endpoints.
-// Requires Node runtime (E2B SDK).
-import { Sandbox } from '@e2b/code-interpreter'
+// The E2B SDK is imported DYNAMICALLY inside runCode so any load/bundling issue
+// degrades gracefully instead of crashing the whole function.
 
 const TAVILY_URL = 'https://api.tavily.com/search'
 
@@ -47,6 +47,7 @@ export async function runCode(code, language = 'python') {
 
   let sbx = null
   try {
+    const { Sandbox } = await import('@e2b/code-interpreter')
     sbx = await Sandbox.create({ apiKey: key, timeoutMs: 60_000 })
     const exec = await sbx.runCode(code, { language: lang })
     const stdout = (exec.logs?.stdout || []).join('')
