@@ -99,6 +99,16 @@ export async function chatOnce({ messages, model, memories }) {
     .trim()
 }
 
+// Boot a live server for a fullstack/backend artifact in an E2B sandbox.
+export async function serveArtifact(files) {
+  const res = await fetch('/api/serve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  })
+  return res.json()
+}
+
 // Run a code block in the E2B sandbox.
 export async function runCodeRemote(code, language) {
   const res = await fetch('/api/run', {
