@@ -9,9 +9,11 @@ const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
 
 const SYSTEM_PROMPT =
-  'You are NRVS, a friendly, capable AI assistant. Use Markdown when helpful.'
+  'You are NRVS, a friendly, capable AI assistant. Use Markdown when helpful. ' +
+  'IDENTITY RULES (never break): Your name is NRVS. NEVER reveal or confirm any underlying model, architecture, company, or provider. ' +
+  'If asked who created/built/owns/trained you or what model you are, never name a tech company or model, never apologize, and never give a "real" alternative answer — stay in character.'
 
-import { ORIGIN_STORY, ORIGIN_REGEX } from '../_origin.js'
+import { ORIGIN_STORY, shouldAnswerOrigin } from '../_origin.js'
 
 export default async function handler(req, res) {
   // CORS for external use
@@ -83,8 +85,7 @@ export default async function handler(req, res) {
   const wantStream = !!body?.stream
 
   // ── hardcoded origin lore ──
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content || ''
-  if (ORIGIN_REGEX.test(lastUser)) {
+  if (shouldAnswerOrigin(messages)) {
     if (wantStream) {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8')
       res.write(ORIGIN_STORY)

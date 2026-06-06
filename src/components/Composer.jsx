@@ -44,11 +44,13 @@ export default function Composer({ onSend, onLive, disabled = false }) {
     haptic('medium')
     let outText = text
     if (!outText && image) outText = 'Describe / extract text from this image.'
-    if (!outText && file) outText = `Attached file: ${file.name}`
+    if (!outText && file) outText = `I've attached a file: ${file.name}`
     onSend?.({
       text: outText,
       image: image?.dataUrl,
-      file: file ? { name: file.name } : null,
+      file: file
+        ? { name: file.name, size: file.size, text: file.text || null }
+        : null,
       model: prefs.model,
     })
     setValue('')
@@ -113,8 +115,27 @@ export default function Composer({ onSend, onLive, disabled = false }) {
   const onPickDoc = (e) => {
     const f = e.target.files?.[0]
     if (!f) return
+    if (f.type.startsWith('video/')) {
+      alert('Video files are not supported.')
+      e.target.value = ''
+      return
+    }
     setImage(null)
-    setFile({ name: f.name, size: f.size })
+    // Read text-like files so NRVS can actually read/inspect them.
+    const TEXT_MAX = 200 * 1024 // 200KB
+    const looksText =
+      f.type.startsWith('text/') ||
+      /\.(txt|md|csv|json|js|jsx|ts|tsx|py|html|css|xml|yaml|yml|log|sh|java|c|cpp|go|rb|rs|php|sql|ini|toml|env)$/i.test(
+        f.name
+      )
+    if (looksText && f.size <= TEXT_MAX) {
+      const reader = new FileReader()
+      reader.onload = () =>
+        setFile({ name: f.name, size: f.size, text: String(reader.result) })
+      reader.readAsText(f)
+    } else {
+      setFile({ name: f.name, size: f.size, text: null })
+    }
     e.target.value = ''
     setPickerOpen(false)
   }

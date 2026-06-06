@@ -104,8 +104,8 @@ export default function Message({
       className={`flex w-full gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
       {!isUser && (
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface">
-          <Mark size={18} />
+        <div className="mt-0.5 flex h-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface px-2.5">
+          <Mark size={30} />
         </div>
       )}
 

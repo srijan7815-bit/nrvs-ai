@@ -3,11 +3,21 @@ import { AppWindow, Trash2, MessageSquare, Eye } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useLibrary, deleteLibraryItem } from '../lib/library'
 import { useArtifacts } from '../lib/artifacts'
+import { useConfirm } from '../lib/useConfirm'
 
 export default function Library() {
   const items = useLibrary()
   const navigate = useNavigate()
   const { openArtifact } = useArtifacts()
+  const [confirm, confirmUI] = useConfirm()
+
+  const askDelete = async (it) => {
+    const ok = await confirm({
+      title: 'Delete artifact?',
+      message: `“${it.title}” will be removed from your Library.`,
+    })
+    if (ok) deleteLibraryItem(it.id)
+  }
 
   return (
     <Layout>
@@ -41,7 +51,7 @@ export default function Library() {
                     </div>
                   </div>
                   <button
-                    onClick={() => deleteLibraryItem(it.id)}
+                    onClick={() => askDelete(it)}
                     className="shrink-0 rounded-sm p-1 text-text-tertiary hover:text-danger"
                     aria-label="Delete"
                   >
@@ -76,6 +86,7 @@ export default function Library() {
           </div>
         )}
       </div>
+      {confirmUI}
     </Layout>
   )
 }

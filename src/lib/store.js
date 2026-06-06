@@ -66,7 +66,7 @@ export async function refreshFromCloud() {
   let t = null
   let res = await supabase
     .from('threads')
-    .select('id,title,shared,created_at,updated_at')
+    .select('id,title,shared,project_id,created_at,updated_at')
     .order('updated_at', { ascending: false })
   if (res.error) {
     res = await supabase
@@ -90,6 +90,7 @@ export async function refreshFromCloud() {
     id: th.id,
     title: th.title,
     shared: th.shared || false,
+    projectId: th.project_id || null,
     createdAt: new Date(th.created_at).getTime(),
     updatedAt: new Date(th.updated_at).getTime(),
     messages: msgs
@@ -342,6 +343,24 @@ export async function deleteThread(id) {
   emit()
   if (userId && isCloudEnabled) {
     await supabase.from('threads').delete().eq('id', id)
+  }
+}
+
+// Assign (or unassign) a thread to a project.
+export async function assignThreadToProject(threadId, projectId) {
+  threads = threads.map((t) =>
+    t.id === threadId ? { ...t, projectId: projectId || null } : t
+  )
+  emit()
+  if (userId && isCloudEnabled) {
+    try {
+      await supabase
+        .from('threads')
+        .update({ project_id: projectId || null })
+        .eq('id', threadId)
+    } catch {
+      /* column may not exist yet */
+    }
   }
 }
 

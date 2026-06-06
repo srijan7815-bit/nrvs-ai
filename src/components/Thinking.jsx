@@ -3,7 +3,7 @@ import Mark from './Mark'
 
 /**
  * "Thinking" indicator shown while waiting for the first token.
- * Animated bouncing dots + a shimmering label + a gently spinning brand mark.
+ * Animated bouncing dots + a shimmering label. (No spin on the brand mark.)
  */
 export default function Thinking() {
   return (
@@ -13,13 +13,9 @@ export default function Thinking() {
       transition={{ duration: 0.2 }}
       className="flex w-full items-center gap-3"
     >
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface"
-      >
-        <Mark size={18} />
-      </motion.div>
+      <div className="mt-0.5 flex h-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface px-2.5">
+        <Mark size={30} />
+      </div>
 
       <div className="flex items-center gap-2 pt-1.5">
         <div className="flex items-center gap-1">

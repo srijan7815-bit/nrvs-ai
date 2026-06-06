@@ -5,6 +5,7 @@ import { useThreads, deleteThread } from '../lib/store'
 import Wordmark from './Wordmark'
 import { useAuth } from '../lib/auth'
 import { useProfile } from '../lib/profile'
+import { useConfirm } from '../lib/useConfirm'
 
 /**
  * Shared sidebar body used by both the desktop fixed sidebar and the mobile overlay.
@@ -18,6 +19,19 @@ export default function SidebarContent({ onNavigate }) {
   const { user } = useAuth()
   const { name } = useProfile()
   const initial = (name || user?.email || USER_INITIAL).charAt(0).toUpperCase()
+  const [confirm, confirmUI] = useConfirm()
+
+  const askDelete = async (t) => {
+    const ok = await confirm({
+      title: 'Delete thread?',
+      message: `“${t.title}” will be permanently deleted.`,
+      confirmLabel: 'Delete',
+    })
+    if (ok) {
+      deleteThread(t.id)
+      if (params.id === t.id) go('/')
+    }
+  }
 
   const go = (to) => {
     navigate(to)
@@ -93,8 +107,7 @@ export default function SidebarContent({ onNavigate }) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      deleteThread(t.id)
-                      if (active) go('/')
+                      askDelete(t)
                     }}
                     className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-sm text-text-tertiary hover:text-danger group-hover:flex"
                     aria-label="Delete thread"
@@ -125,6 +138,7 @@ export default function SidebarContent({ onNavigate }) {
           New thread
         </button>
       </div>
+      {confirmUI}
     </div>
   )
 }

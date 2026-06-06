@@ -79,6 +79,67 @@ export async function runCode(code, language = 'python') {
   }
 }
 
+// File explorer: writes provided files into a sandbox, runs a shell command,
+// and returns stdout/stderr + the (possibly modified) contents of files to read back.
+// files: [{ name, content }]; command: bash to run; readBack: [filenames]
+export async function fileExplorer({ files = [], command = '', readBack = [] }) {
+  const key = process.env.E2B_API_KEY
+  if (!key) return { error: 'File tools are not configured (E2B_API_KEY missing).' }
+  let sbx = null
+  try {
+    const { Sandbox } = await import('@e2b/code-interpreter')
+    sbx = await Sandbox.create({ apiKey: key, timeoutMs: 90_000 })
+
+    // write provided files
+    for (const f of files) {
+      if (!f?.name) continue
+      try {
+        await sbx.files.write(f.name, f.content ?? '')
+      } catch {
+        /* ignore individual write errors */
+      }
+    }
+
+    let stdout = ''
+    let stderr = ''
+    if (command) {
+      // run the shell command (read/extract/transform/execute)
+      const exec = await sbx.runCode(
+        `import subprocess\nr=subprocess.run(${JSON.stringify(['bash', '-lc', command])}, capture_output=True, text=True)\nprint(r.stdout)\nimport sys\nif r.stderr: print(r.stderr, file=sys.stderr)`,
+        { language: 'python' }
+      )
+      stdout = (exec.logs?.stdout || []).join('')
+      stderr = (exec.logs?.stderr || []).join('')
+    }
+
+    // read back requested files
+    const readResults = {}
+    for (const name of readBack || []) {
+      try {
+        readResults[name] = (await sbx.files.read(name)).slice(0, 6000)
+      } catch {
+        readResults[name] = null
+      }
+    }
+
+    return {
+      stdout: String(stdout).slice(0, 6000),
+      stderr: String(stderr).slice(0, 2000),
+      files: readResults,
+    }
+  } catch (e) {
+    return { error: 'File explorer error: ' + (e?.message || 'unknown') }
+  } finally {
+    if (sbx) {
+      try {
+        await sbx.kill()
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 export const TOOL_DEFINITIONS = [
   {
     type: 'function',
@@ -112,6 +173,42 @@ export const TOOL_DEFINITIONS = [
           },
         },
         required: ['code'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'file_explorer',
+      description:
+        'Work with files in a sandbox: write/create files, then run a bash command to read, inspect, extract (zip/tar), transform, or execute them, and read back results. Use when the user attached a file or asks you to process/extract/convert/run files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          files: {
+            type: 'array',
+            description: 'Files to create in the sandbox before running the command',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                content: { type: 'string' },
+              },
+              required: ['name'],
+            },
+          },
+          command: {
+            type: 'string',
+            description:
+              'Bash command to run (e.g. "cat data.csv | head", "unzip a.zip -d out && ls out", "python script.py")',
+          },
+          readBack: {
+            type: 'array',
+            description: 'Filenames to read back after the command runs',
+            items: { type: 'string' },
+          },
+        },
+        required: ['command'],
       },
     },
   },

@@ -11,6 +11,7 @@ import SharedLinks from './screens/SharedLinks'
 import SharedChat from './screens/SharedChat'
 import Library from './screens/Library'
 import Projects from './screens/Projects'
+import ProjectDetail from './screens/ProjectDetail'
 import Secrets from './screens/Secrets'
 import ApiKeys from './screens/ApiKeys'
 import { useAuth } from './lib/auth'
@@ -109,6 +110,14 @@ export default function App() {
         element={
           <Protected>
             <Projects />
+          </Protected>
+        }
+      />
+      <Route
+        path="/project/:id"
+        element={
+          <Protected>
+            <ProjectDetail />
           </Protected>
         }
       />

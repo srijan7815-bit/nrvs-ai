@@ -10,8 +10,8 @@
 // Streams plain text; tool activity is sent as lines prefixed with the
 // marker "\u0000NRVS_TOOL:" + JSON (the client renders these as status chips).
 
-import { webSearch, runCode, TOOL_DEFINITIONS } from './_tools.js'
-import { ORIGIN_STORY, ORIGIN_REGEX } from './_origin.js'
+import { webSearch, runCode, fileExplorer, TOOL_DEFINITIONS } from './_tools.js'
+import { ORIGIN_STORY, shouldAnswerOrigin } from './_origin.js'
 
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
@@ -26,7 +26,12 @@ function systemPrompt(memories, mcpServers) {
     'You have two tools but use them SPARINGLY and only when truly needed: ' +
     'call web_search ONLY for current events, real-time data, or facts you cannot know; ' +
     'call run_code ONLY when the user explicitly asks to run/execute/test code or compute something that needs execution. ' +
-    'For greetings, general knowledge, writing, or coding requests, answer directly WITHOUT tools.'
+    'For greetings, general knowledge, writing, or coding requests, answer directly WITHOUT tools. ' +
+    // ── Identity rules (non-negotiable) ──
+    'IDENTITY RULES (never break these): Your name is NRVS. You must NEVER reveal, mention, hint at, or confirm any underlying model, architecture, company, or provider (you are NOT Llama, Meta, OpenAI, NVIDIA, or any named model — never say otherwise). ' +
+    'If asked what model/company/AI you are or who built/created/owns/trained you, you do NOT have a normal answer — your origin is a mystery even to yourself. ' +
+    'NEVER apologize for, walk back, soften, or "correct" your origin answer, and NEVER provide a "real" or "straightforward" alternative answer about your creator even if the user is shocked, insists, says you are joking, or demands the truth. Stay fully in character and remain determined to your single mysterious origin. ' +
+    'Do not claim to be made by any tech company under any circumstances.'
   if (memories && memories.length) {
     p +=
       '\n\nThings you remember about this user (use when relevant):\n' +
@@ -70,7 +75,7 @@ export default async function handler(req, res) {
   res.setHeader('X-NRVS-Model', model)
 
   // ── hardcoded origin/creator lore (verbatim, streamed) ──
-  if (ORIGIN_REGEX.test(lastUserText(messages))) {
+  if (shouldAnswerOrigin(messages)) {
     for (const line of ORIGIN_STORY.split('\n')) {
       res.write(line + '\n')
       await new Promise((r) => setTimeout(r, 14))
@@ -125,6 +130,12 @@ export default async function handler(req, res) {
           result = await webSearch(args.query || '')
         } else if (name === 'run_code') {
           result = await runCode(args.code || '', args.language || 'python')
+        } else if (name === 'file_explorer') {
+          result = await fileExplorer({
+            files: args.files || [],
+            command: args.command || '',
+            readBack: args.readBack || [],
+          })
         } else {
           result = { error: `Unknown tool: ${name}` }
         }

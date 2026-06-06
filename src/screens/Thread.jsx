@@ -7,6 +7,7 @@ import Message from '../components/Message'
 import Thinking from '../components/Thinking'
 import ShareDialog from '../components/ShareDialog'
 import LiveMode from '../components/LiveMode'
+import AddToProject from '../components/AddToProject'
 import { useThread } from '../lib/store'
 import { useChat } from '../lib/useChat'
 import { syncLiveShares } from '../lib/shares'
@@ -54,6 +55,7 @@ export default function Thread() {
               </span>
             )}
           </div>
+          <AddToProject threadId={id} currentProjectId={thread.projectId} />
           <button
             onClick={() => setShareOpen(true)}
             className="btn-icon flex h-9 items-center gap-1.5 px-3 text-body-sm text-text-secondary"

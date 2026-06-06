@@ -12,6 +12,7 @@ import {
 } from './store'
 import { memoryContext, getMemories, addMemory } from './memory'
 import { getServers } from './mcp'
+import { filesForProject } from './projects'
 
 /**
  * Sends a message + streams the reply, with tool activity, memory injection,
@@ -25,23 +26,36 @@ export function useChat() {
 
   const send = useCallback(
     async (payload, threadIdArg) => {
-      const { text, image, model } =
+      const { text, image, model, file } =
         typeof payload === 'string' ? { text: payload } : payload || {}
-      if (!text && !image) return
+      if (!text && !image && !file) return
 
       setError(null)
       let threadId = threadIdArg
 
+      // What we show in the bubble vs. what we send to the model.
+      const displayText = text || ''
+      let sendText = text || ''
+      if (file?.text) {
+        sendText +=
+          `\n\n--- Attached file: ${file.name} ---\n` +
+          file.text.slice(0, 60000) +
+          `\n--- end of file ---`
+      } else if (file && !file.text) {
+        sendText += `\n\n(User attached a binary/non-text file: ${file.name}. You cannot read its contents directly.)`
+      }
+
       try {
         if (!threadId) {
-          threadId = await createThread(text || 'Image')
+          threadId = await createThread(displayText || file?.name || 'File')
           navigate(`/thread/${threadId}`)
         }
 
         await addMessage(threadId, {
           role: 'user',
-          content: text || '',
+          content: displayText,
           image: image || null,
+          file: file ? { name: file.name, size: file.size } : null,
         })
         const assistantId = await addMessage(threadId, {
           role: 'assistant',
@@ -52,8 +66,29 @@ export function useChat() {
         const history = (getThread(threadId)?.messages || [])
           .filter((m) => m.id !== assistantId)
           .map((m) => ({ role: m.role, content: m.content }))
+        // Substitute the latest user turn with the version that includes file content.
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (history[i].role === 'user') {
+            history[i] = { role: 'user', content: sendText || history[i].content }
+            break
+          }
+        }
 
         const memList = getMemories().map((m) => m.content)
+        // If this thread belongs to a project, share that project's files/context.
+        const thr = getThread(threadId)
+        if (thr?.projectId) {
+          const pf = filesForProject(thr.projectId)
+          for (const f of pf) {
+            if (f.content) {
+              memList.push(
+                `Project file "${f.name}":\n${String(f.content).slice(0, 8000)}`
+              )
+            } else {
+              memList.push(`Project has a file named "${f.name}".`)
+            }
+          }
+        }
         const mcpList = getServers()
           .filter((s) => s.enabled)
           .map((s) => `${s.name} (${s.url})`)

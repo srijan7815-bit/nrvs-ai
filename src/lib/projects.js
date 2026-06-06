@@ -64,6 +64,7 @@ export async function initProjectsForUser(id) {
     projects = loadLocal()
   }
   emit()
+  loadProjectFiles()
 }
 
 export async function createProject(name, description = '') {
@@ -104,6 +105,90 @@ export async function deleteProject(id) {
 export function getProjects() {
   return projects
 }
+export function getProject(id) {
+  return projects.find((p) => p.id === id) || null
+}
 export function useProjects() {
   return useSyncExternalStore(subscribe, getProjects, getProjects)
+}
+
+// ── project files (shared across the project's threads) ──
+let projectFiles = [] // {id, projectId, name, content}
+const fileListeners = new Set()
+function emitFiles() {
+  if (!userId) {
+    try {
+      localStorage.setItem('nrvs.projectFiles.v1', JSON.stringify(projectFiles))
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const l of fileListeners) l()
+}
+function subFiles(cb) {
+  fileListeners.add(cb)
+  return () => fileListeners.delete(cb)
+}
+
+export async function loadProjectFiles() {
+  if (!userId || !isCloudEnabled) {
+    try {
+      projectFiles = JSON.parse(localStorage.getItem('nrvs.projectFiles.v1') || '[]')
+    } catch {
+      projectFiles = []
+    }
+    emitFiles()
+    return
+  }
+  try {
+    const { data } = await supabase
+      .from('project_files')
+      .select('id,project_id,name,content,created_at')
+      .order('created_at', { ascending: false })
+    projectFiles = (data || []).map((f) => ({
+      id: f.id,
+      projectId: f.project_id,
+      name: f.name,
+      content: f.content,
+    }))
+  } catch {
+    projectFiles = []
+  }
+  emitFiles()
+}
+
+export async function addProjectFile(projectId, { name, content }) {
+  const tempId = uid()
+  projectFiles = [{ id: tempId, projectId, name, content: content || null }, ...projectFiles]
+  emitFiles()
+  if (userId && isCloudEnabled) {
+    try {
+      const { data } = await supabase
+        .from('project_files')
+        .insert({ user_id: userId, project_id: projectId, name, content: content || null })
+        .select('id')
+        .single()
+      if (data?.id) {
+        projectFiles = projectFiles.map((f) => (f.id === tempId ? { ...f, id: data.id } : f))
+        emitFiles()
+      }
+    } catch {
+      /* keep local */
+    }
+  }
+}
+
+export async function deleteProjectFile(id) {
+  projectFiles = projectFiles.filter((f) => f.id !== id)
+  emitFiles()
+  if (userId && isCloudEnabled) {
+    await supabase.from('project_files').delete().eq('id', id)
+  }
+}
+
+export function filesForProject(projectId) {
+  return projectFiles.filter((f) => f.projectId === projectId)
+}
+export function useProjectFiles() {
+  return useSyncExternalStore(subFiles, () => projectFiles, () => projectFiles)
 }

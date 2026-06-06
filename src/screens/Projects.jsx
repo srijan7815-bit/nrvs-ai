@@ -1,15 +1,27 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FolderOpen, Plus, Trash2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Layout from '../components/Layout'
 import { useProjects, createProject, deleteProject } from '../lib/projects'
 import { haptic } from '../lib/haptics'
+import { useConfirm } from '../lib/useConfirm'
 
 export default function Projects() {
+  const navigate = useNavigate()
   const projects = useProjects()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
+  const [confirm, confirmUI] = useConfirm()
+
+  const askDelete = async (p) => {
+    const ok = await confirm({
+      title: 'Delete project?',
+      message: `“${p.name}” will be deleted. Threads inside it won’t be removed.`,
+    })
+    if (ok) deleteProject(p.id)
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -53,21 +65,26 @@ export default function Projects() {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {projects.map((p) => (
-              <div key={p.id} className="card rounded-md p-4">
+              <div key={p.id} className="card card-hover rounded-md p-4">
                 <div className="flex items-start gap-2">
-                  <FolderOpen size={18} className="mt-0.5 text-accent-orange" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-body font-medium text-text-primary">
-                      {p.name}
-                    </div>
-                    {p.description && (
-                      <div className="mt-0.5 line-clamp-2 text-body-sm text-text-tertiary">
-                        {p.description}
-                      </div>
-                    )}
-                  </div>
                   <button
-                    onClick={() => deleteProject(p.id)}
+                    onClick={() => navigate(`/project/${p.id}`)}
+                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                  >
+                    <FolderOpen size={18} className="mt-0.5 text-accent-orange" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-body font-medium text-text-primary">
+                        {p.name}
+                      </div>
+                      {p.description && (
+                        <div className="mt-0.5 line-clamp-2 text-body-sm text-text-tertiary">
+                          {p.description}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => askDelete(p)}
                     className="shrink-0 rounded-sm p-1 text-text-tertiary hover:text-danger"
                     aria-label="Delete project"
                   >
@@ -135,6 +152,7 @@ export default function Projects() {
           </motion.div>
         )}
       </AnimatePresence>
+      {confirmUI}
     </Layout>
   )
 }
