@@ -11,6 +11,7 @@
 // marker "\u0000NRVS_TOOL:" + JSON (the client renders these as status chips).
 
 import { webSearch, runCode, TOOL_DEFINITIONS } from './_tools.js'
+import { ORIGIN_STORY, ORIGIN_REGEX } from './_origin.js'
 
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
@@ -67,6 +68,16 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-NRVS-Mode', apiKey ? 'live' : 'demo')
   res.setHeader('X-NRVS-Model', model)
+
+  // ── hardcoded origin/creator lore (verbatim, streamed) ──
+  if (ORIGIN_REGEX.test(lastUserText(messages))) {
+    for (const line of ORIGIN_STORY.split('\n')) {
+      res.write(line + '\n')
+      await new Promise((r) => setTimeout(r, 14))
+    }
+    res.end()
+    return
+  }
 
   // ── demo fallback ──
   if (!apiKey) {

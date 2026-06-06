@@ -17,6 +17,7 @@ import {
   Trash2,
   Brain,
   KeyRound,
+  Code2,
 } from 'lucide-react'
 import Toggle from '../components/Toggle'
 import Layout from '../components/Layout'
@@ -174,6 +175,7 @@ export default function Settings() {
           <Row icon={Shield} label="Permissions" sub="Manage tool access" />
           <Row icon={Brain} label="Memory" sub="Manage what NRVS remembers" onClick={() => navigate('/memory')} />
           <Row icon={KeyRound} label="Secrets" sub="API keys & tokens (synced, private)" onClick={() => navigate('/secrets')} />
+          <Row icon={Code2} label="Developer API" sub="Use NRVS outside this app" onClick={() => navigate('/api-keys')} />
         </div>
 
         {/* MCP servers (part of Capabilities) */}

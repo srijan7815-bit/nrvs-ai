@@ -12,6 +12,7 @@ import SharedChat from './screens/SharedChat'
 import Library from './screens/Library'
 import Projects from './screens/Projects'
 import Secrets from './screens/Secrets'
+import ApiKeys from './screens/ApiKeys'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
 import { initMemoryForUser } from './lib/memory'
@@ -20,6 +21,7 @@ import { initSharesForUser } from './lib/shares'
 import { initLibraryForUser } from './lib/library'
 import { initSecretsForUser } from './lib/secrets'
 import { initProjectsForUser } from './lib/projects'
+import { initApiKeysForUser } from './lib/apikeys'
 import NameSetup from './components/NameSetup'
 
 /** Returns true if the visitor explicitly chose guest mode. */
@@ -62,6 +64,7 @@ export default function App() {
     initLibraryForUser(id)
     initSecretsForUser(id)
     initProjectsForUser(id)
+    initApiKeysForUser(id)
   }, [user?.id, loading, cloud])
 
   return (
@@ -122,6 +125,14 @@ export default function App() {
         element={
           <Protected>
             <Secrets />
+          </Protected>
+        }
+      />
+      <Route
+        path="/api-keys"
+        element={
+          <Protected>
+            <ApiKeys />
           </Protected>
         }
       />

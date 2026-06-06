@@ -6,11 +6,28 @@
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const EXTRACT_MODEL = 'meta/llama-3.1-8b-instruct'
 
-const SYS = `You extract durable facts about the USER worth remembering long-term across conversations.
-Only capture stable, personal, useful facts: name, preferences, goals, profession, tools they use, ongoing projects, constraints.
-DO NOT capture: one-off questions, transient context, sensitive data (passwords, full card numbers), or assistant statements.
-Return STRICT JSON only: {"facts": ["fact 1", "fact 2"]}. If nothing worth saving, return {"facts": []}.
-Keep each fact short (max ~12 words), written in third person ("User prefers ...").`
+const SYS = `You decide whether a short conversation reveals an ENDURING fact about WHO THE USER IS that would help an assistant understand them as a person across future, unrelated conversations.
+
+Capture ONLY stable, identity-level facts the user states about THEMSELVES, such as:
+- their name or what they want to be called
+- their profession / role / field of study
+- a long-term, explicitly stated preference about how they like answers (tone, length, language)
+- a durable personal trait, value, or constraint they state about themselves (e.g. "I'm a beginner", "I'm vegetarian", "I'm dyslexic")
+- a stable long-term goal they explicitly state
+
+Be EXTREMELY conservative. The default answer is NOTHING.
+
+DO NOT capture:
+- the topic, subject, or content of what they're currently asking about
+- one-off tasks, questions, requests, or what they're working on right now
+- temporary context, facts about the world, code, or anything the assistant said
+- anything that wouldn't still be true and useful months from now
+- vague or inferred traits — only explicit self-statements
+
+If in doubt, return nothing. It is far better to save nothing than to save a chat topic.
+
+Return STRICT JSON only: {"facts": ["..."]}. Empty when nothing qualifies: {"facts": []}.
+Each fact: short (max ~10 words), third person, about the user ("User is a doctor.", "User prefers concise answers.").`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
