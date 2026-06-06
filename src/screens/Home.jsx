@@ -7,6 +7,7 @@ import { useChat } from '../lib/useChat'
 import { usePrefs } from '../lib/prefs'
 import { useProfile } from '../lib/profile'
 import { haptic } from '../lib/haptics'
+import { useFlowLauncher } from '../lib/useFlowLauncher'
 
 function greeting() {
   const h = new Date().getHours()
@@ -28,6 +29,12 @@ export default function Home() {
   const { name } = useProfile()
   const firstName = (name || '').split(' ')[0]
   const [live, setLive] = useState(false)
+  const { launch, overlay } = useFlowLauncher()
+
+  const handleSend = (p) => {
+    if (p?.flowState && p.text) return launch(p.text, p.model)
+    return send(p)
+  }
 
   return (
     <Layout>
@@ -61,10 +68,11 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-3xl pb-6">
-          <Composer onSend={(p) => send(p)} onLive={() => setLive(true)} disabled={busy} />
+          <Composer onSend={handleSend} onLive={() => setLive(true)} disabled={busy} />
         </div>
       </div>
       <LiveMode open={live} onClose={() => setLive(false)} />
+      {overlay}
     </Layout>
   )
 }

@@ -10,7 +10,7 @@ import {
   persistMessageContent,
   truncateFromMessage,
 } from './store'
-import { memoryContext, getMemories, addMemory } from './memory'
+import { getMemories, addMemory } from './memory'
 import { getServers } from './mcp'
 import { filesForProject } from './projects'
 import { setBusy, setError, useBusy } from './busy'

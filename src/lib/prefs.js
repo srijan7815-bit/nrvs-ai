@@ -9,6 +9,7 @@ const DEFAULTS = {
   colorMode: 'System',
   fontId: 'inter',
   model: 'meta/llama-3.3-70b-instruct',
+  flowState: false,
 }
 
 function load() {

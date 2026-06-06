@@ -112,11 +112,6 @@ export function getMemories() {
   return memories
 }
 
-// Compact string injected into the system prompt so the model "remembers".
-export function memoryContext() {
-  if (!memories.length) return ''
-  return memories.map((m) => `- ${m.content}`).join('\n')
-}
 
 export function useMemories() {
   return useSyncExternalStore(subscribe, getMemories, getMemories)

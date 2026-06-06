@@ -11,6 +11,7 @@ import { addMemory } from '../lib/memory'
 import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts'
 import { saveToLibrary } from '../lib/library'
 import { haptic } from '../lib/haptics'
+import { useProfile } from '../lib/profile'
 
 export default function Message({
   role,
@@ -25,6 +26,8 @@ export default function Message({
   onRetry,
 }) {
   const isUser = role === 'user'
+  const { name } = useProfile()
+  const userInitial = (name || USER_INITIAL).charAt(0).toUpperCase()
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [remembered, setRemembered] = useState(false)
@@ -307,7 +310,7 @@ export default function Message({
 
       {isUser && (
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-surface2 text-body-sm font-medium text-text-primary ring-1 ring-border">
-          {USER_INITIAL}
+          {userInitial}
         </div>
       )}
     </motion.div>

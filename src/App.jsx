@@ -4,7 +4,6 @@ import { Loader2 } from 'lucide-react'
 import Home from './screens/Home'
 import Thread from './screens/Thread'
 import Settings from './screens/Settings'
-import Placeholder from './screens/Placeholder'
 import Login from './screens/Login'
 import Memory from './screens/Memory'
 import SharedLinks from './screens/SharedLinks'
@@ -14,6 +13,8 @@ import Projects from './screens/Projects'
 import ProjectDetail from './screens/ProjectDetail'
 import Secrets from './screens/Secrets'
 import ApiKeys from './screens/ApiKeys'
+import Flows from './screens/Flows'
+import MissionControl from './screens/MissionControl'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
 import { initMemoryForUser } from './lib/memory'
@@ -23,6 +24,7 @@ import { initLibraryForUser } from './lib/library'
 import { initSecretsForUser } from './lib/secrets'
 import { initProjectsForUser } from './lib/projects'
 import { initApiKeysForUser } from './lib/apikeys'
+import { initFlowsForUser } from './lib/flows'
 import NameSetup from './components/NameSetup'
 
 /** Returns true if the visitor explicitly chose guest mode. */
@@ -66,6 +68,7 @@ export default function App() {
     initSecretsForUser(id)
     initProjectsForUser(id)
     initApiKeysForUser(id)
+    initFlowsForUser(id)
   }, [user?.id, loading, cloud])
 
   return (
@@ -126,6 +129,22 @@ export default function App() {
         element={
           <Protected>
             <Library />
+          </Protected>
+        }
+      />
+      <Route
+        path="/flows"
+        element={
+          <Protected>
+            <Flows />
+          </Protected>
+        }
+      />
+      <Route
+        path="/flow/:id"
+        element={
+          <Protected>
+            <MissionControl />
           </Protected>
         }
       />

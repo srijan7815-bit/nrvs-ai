@@ -9,6 +9,7 @@ import {
   Image as ImageTile,
   FileText,
   Paperclip,
+  Workflow,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import ModelPicker from './ModelPicker'
@@ -52,6 +53,7 @@ export default function Composer({ onSend, onLive, disabled = false }) {
         ? { name: file.name, size: file.size, text: file.text || null }
         : null,
       model: prefs.model,
+      flowState: prefs.flowState,
     })
     setValue('')
     setImage(null)
@@ -277,6 +279,28 @@ export default function Composer({ onSend, onLive, disabled = false }) {
             value={prefs.model}
             onChange={(id) => setPref('model', id)}
           />
+          {/* Flow State toggle — click to enable, click again to disable */}
+          <button
+            type="button"
+            onClick={() => {
+              haptic('select')
+              setPref('flowState', !prefs.flowState)
+            }}
+            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-pill border px-3 text-body-sm transition-colors ${
+              prefs.flowState
+                ? 'border-accent-orange/50 bg-accent-orange/15 text-accent-orange'
+                : 'border-border bg-surface text-text-secondary hover:bg-border'
+            }`}
+            title={
+              prefs.flowState
+                ? 'Flow State is ON — give an objective and NRVS builds a mission control'
+                : 'Enable Flow State Mode'
+            }
+            aria-pressed={prefs.flowState}
+          >
+            <Workflow size={15} strokeWidth={1.75} />
+            <span className="hidden sm:inline">Flow State</span>
+          </button>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">

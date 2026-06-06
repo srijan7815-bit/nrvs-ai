@@ -4,6 +4,7 @@ import {
   FolderOpen,
   LayoutGrid,
   Brain,
+  Workflow,
 } from 'lucide-react'
 
 /**
@@ -13,6 +14,7 @@ import {
  */
 export const navItems = [
   { id: 'thread', label: 'Thread', icon: MessageCircle, to: '/' },
+  { id: 'flows', label: 'Flow State', icon: Workflow, to: '/flows' },
   { id: 'library', label: 'Library', icon: Library, to: '/library' },
   { id: 'projects', label: 'Projects', icon: FolderOpen, to: '/projects' },
   { id: 'artifacts', label: 'Artifacts', icon: LayoutGrid, to: '/artifacts' },

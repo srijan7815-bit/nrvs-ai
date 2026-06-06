@@ -10,12 +10,19 @@ import LiveMode from '../components/LiveMode'
 import AddToProject from '../components/AddToProject'
 import { useThread } from '../lib/store'
 import { useChat } from '../lib/useChat'
+import { useFlowLauncher } from '../lib/useFlowLauncher'
 import { syncLiveShares } from '../lib/shares'
 
 export default function Thread() {
   const { id } = useParams()
   const thread = useThread(id)
   const { send, stop, editAndRetry, retry, busy, error } = useChat(id)
+  const { launch, overlay } = useFlowLauncher()
+
+  const handleSend = (p) => {
+    if (p?.flowState && p.text) return launch(p.text, p.model)
+    return send(p, id)
+  }
   const bottomRef = useRef(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [live, setLive] = useState(false)
@@ -114,7 +121,7 @@ export default function Thread() {
               </button>
             </div>
           )}
-          <Composer onSend={(p) => send(p, id)} onLive={() => setLive(true)} disabled={busy} />
+          <Composer onSend={handleSend} onLive={() => setLive(true)} disabled={busy} />
         </div>
       </div>
 
@@ -124,6 +131,7 @@ export default function Thread() {
         onClose={() => setShareOpen(false)}
       />
       <LiveMode open={live} onClose={() => setLive(false)} />
+      {overlay}
     </Layout>
   )
 }
