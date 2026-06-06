@@ -96,17 +96,30 @@ export default async function handler(req, res) {
     ...buildMessages(messages, image),
   ]
 
-  // Keep-alive: flush a leading byte immediately so the gateway never 504s
-  // while the (non-streaming) tool-decision round runs. A leading newline is
-  // harmless and trimmed/ignored by the client renderer.
+  // Keep-alive: flush a leading byte immediately so the gateway never 504s.
   res.write(' ')
   if (typeof res.flush === 'function') res.flush()
 
+  // Only run the (blocking) tool pre-round when the request plausibly needs a
+  // tool. Otherwise stream the answer immediately — this keeps normal chats and
+  // long code generations fast and avoids gateway timeouts.
+  const lastText = lastUserText(messages).toLowerCase()
+  const mayNeedTool =
+    toolsEnabled &&
+    (/\b(search|google|look up|latest|news|today|current|right now|weather|price|stock|score|who won|how much is)\b/.test(
+      lastText
+    ) ||
+      /\b(run|execute|compute|calculate|evaluate|test this code|what('?s| is) the output|result of)\b/.test(
+        lastText
+      ) ||
+      /\b(file|\.csv|\.json|\.zip|\.txt|extract|unzip|parse the|read the file|attached file)\b/.test(
+        lastText
+      ))
+
   try {
-    // Tool loop: up to 3 rounds of tool calls before final streamed answer.
-    // The decision round is capped to a SMALL max_tokens — it only needs to
-    // decide whether to call a tool, not write the full answer.
-    for (let round = 0; round < 3; round++) {
+    // Tool loop: only when the request likely needs a tool.
+    const maxRounds = mayNeedTool ? 3 : 0
+    for (let round = 0; round < maxRounds; round++) {
       if (!toolsEnabled) break
       const decision = await callModel(baseURL, apiKey, model, convo, {
         stream: false,
