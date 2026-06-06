@@ -68,16 +68,33 @@ export default async function handler(req, res) {
         : null
     } else if (find(/requirements\.txt$/) || find(/\.py$/)) {
       // Python project
-      if (find(/requirements\.txt$/)) {
-        setupCmd = 'pip install -r requirements.txt 2>&1 | tail -2 || true'
-      }
-      const flaskFile = find(/(app|server|main|wsgi)\.py$/) || find(/\.py$/)
-      if (flaskFile) {
-        // try common frameworks; flask/uvicorn/plain
-        startCmd =
-          `PORT=${PORT} FLASK_APP=${flaskFile.name} ` +
-          `(python3 -m flask run --host=0.0.0.0 --port=${PORT} 2>/dev/null || ` +
-          `PORT=${PORT} python3 ${flaskFile.name})`
+      setupCmd = find(/requirements\.txt$/)
+        ? 'pip install -r requirements.txt 2>&1 | tail -2 || true'
+        : 'pip install flask 2>&1 | tail -1 || true'
+      const pyFile = find(/(app|server|main|wsgi)\.py$/) || find(/\.py$/)
+      if (pyFile) {
+        const mod = pyFile.name.replace(/\.py$/, '').replace(/\//g, '.')
+        // Robust launcher: detect a Flask/FastAPI app object and serve it on
+        // 0.0.0.0:PORT regardless of how the file's own __main__ is written.
+        const launcher = [
+          'import importlib, os',
+          `os.environ.setdefault("PORT","${PORT}")`,
+          'm=None',
+          'try:',
+          `    m=importlib.import_module("${mod}")`,
+          'except Exception as e:',
+          '    print("import-failed",e)',
+          'app=getattr(m,"app",None) or getattr(m,"application",None)',
+          'if app is not None and hasattr(app,"run"):',
+          `    app.run(host="0.0.0.0", port=${PORT})`,
+          'elif app is not None:',
+          '    import uvicorn',
+          `    uvicorn.run(app, host="0.0.0.0", port=${PORT})`,
+          'else:',
+          `    os.system("python3 ${pyFile.name}")`,
+        ].join('\n')
+        await sbx.files.write('_nrvs_launch.py', launcher)
+        startCmd = `python3 _nrvs_launch.py`
       }
     }
 
@@ -101,11 +118,12 @@ export default async function handler(req, res) {
     const host = sbx.getHost(PORT)
     const url = `https://${host}`
     let up = false
-    for (let i = 0; i < 12; i++) {
-      await new Promise((r) => setTimeout(r, 1200))
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 1500))
       try {
         const r = await fetch(url, { method: 'GET' })
-        if (r.ok || r.status < 500) {
+        // e2b returns 502 with a "port is not open" body until the server binds
+        if (r.status !== 502 && r.status !== 503) {
           up = true
           break
         }
