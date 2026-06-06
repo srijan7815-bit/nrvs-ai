@@ -8,7 +8,6 @@ import {
   Sun,
   Mic,
   Smartphone,
-  Lock,
   Link as LinkIcon,
   LogOut,
   ChevronRight,
@@ -175,34 +174,11 @@ export default function Settings() {
           <Row icon={Brain} label="Memory" sub="Manage what NRVS remembers" onClick={() => navigate('/memory')} />
         </div>
 
-        {/* Font */}
-        <SectionTitle>Font</SectionTitle>
-        <div className="card p-2">
-          {FONT_OPTIONS.map((f) => {
-            const active = prefs.fontId === f.id
-            return (
-              <button
-                key={f.id}
-                onClick={() => setPref('fontId', f.id)}
-                className={`flex w-full items-center justify-between rounded-sm px-3 py-2.5 text-left transition-colors ${
-                  active ? 'bg-surface2' : 'hover:bg-border'
-                }`}
-              >
-                <span
-                  className="text-body text-text-primary"
-                  style={{ fontFamily: f.stack }}
-                >
-                  {f.name}
-                </span>
-                {active && <Check size={16} className="text-accent-blue" />}
-              </button>
-            )
-          })}
+        {/* MCP servers (part of Capabilities) */}
+        <div className="mt-3 flex items-center gap-2 px-1 text-body-sm font-medium text-text-secondary">
+          <Server size={15} /> MCP Servers
         </div>
-
-        {/* MCP servers */}
-        <SectionTitle>MCP Servers</SectionTitle>
-        <div className="card p-3">
+        <div className="card mt-2 p-3">
           <p className="mb-3 text-body-sm text-text-tertiary">
             Connect Model Context Protocol servers to extend NRVS with external
             tools and data sources.
@@ -269,6 +245,31 @@ export default function Settings() {
           )}
         </div>
 
+        {/* Font */}
+        <SectionTitle>Font</SectionTitle>
+        <div className="card p-2">
+          {FONT_OPTIONS.map((f) => {
+            const active = prefs.fontId === f.id
+            return (
+              <button
+                key={f.id}
+                onClick={() => setPref('fontId', f.id)}
+                className={`flex w-full items-center justify-between rounded-sm px-3 py-2.5 text-left transition-colors ${
+                  active ? 'bg-surface2' : 'hover:bg-border'
+                }`}
+              >
+                <span
+                  className="text-body text-text-primary"
+                  style={{ fontFamily: f.stack }}
+                >
+                  {f.name}
+                </span>
+                {active && <Check size={16} className="text-accent-blue" />}
+              </button>
+            )
+          })}
+        </div>
+
         {/* Preferences */}
         <SectionTitle>Preferences</SectionTitle>
         <div className="space-y-2">
@@ -308,8 +309,12 @@ export default function Settings() {
               if (next) hapticTest()
             }}
           />
-          <Row icon={Lock} label="Privacy" />
-          <Row icon={LinkIcon} label="Shared links" />
+          <Row
+            icon={LinkIcon}
+            label="Shared links"
+            sub="Manage publicly shared chats"
+            onClick={() => navigate('/shared-links')}
+          />
         </div>
 
         {/* Logout */}

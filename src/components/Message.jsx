@@ -10,7 +10,7 @@ import { speak, stopSpeaking, ttsSupported } from '../lib/speech'
 import { addMemory } from '../lib/memory'
 import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts'
 
-export default function Message({ role, content, image, model, tools, streaming }) {
+export default function Message({ role, content, image, model, tools, streaming, shared }) {
   const isUser = role === 'user'
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -92,7 +92,7 @@ export default function Message({ role, content, image, model, tools, streaming 
               {content && <span className="whitespace-pre-wrap">{content}</span>}
             </div>
             {/* Memory save on user messages */}
-            {content && (
+            {content && !shared && (
               <div className="mt-1 flex justify-end">
                 <button
                   onClick={onRemember}
@@ -122,7 +122,7 @@ export default function Message({ role, content, image, model, tools, streaming 
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-text-tertiary align-middle" />
             )}
 
-            {!streaming && content && (
+            {!streaming && content && !shared && (
               <div className="mt-2 flex items-center gap-1">
                 <button
                   onClick={onCopy}

@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Mic, AudioLines, ArrowUp, X, ImageIcon } from 'lucide-react'
+import {
+  Plus,
+  Mic,
+  AudioLines,
+  ArrowUp,
+  X,
+  ImageIcon,
+  Image as ImageTile,
+  FileText,
+  Paperclip,
+} from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import ModelPicker from './ModelPicker'
 import { usePrefs } from '../lib/prefs'
 import { haptic } from '../lib/haptics'
@@ -9,28 +20,40 @@ import {
 } from '../lib/speech'
 
 /**
- * Functional chat composer with model toggle, voice input (STT), and image attach (OCR/vision).
- * Calls onSend({ text, image }). Enter sends, Shift+Enter newlines.
+ * Functional chat composer with model toggle, voice input (STT), image attach (OCR/vision),
+ * and an upload picker (Photo / Files). Calls onSend({ text, image, file }).
  */
 export default function Composer({ onSend, disabled = false }) {
   const [value, setValue] = useState('')
   const [image, setImage] = useState(null) // { dataUrl, name }
+  const [file, setFile] = useState(null) // { name, size }
   const [listening, setListening] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [prefs, setPref] = usePrefs()
   const taRef = useRef(null)
   const recRef = useRef(null)
   const fileRef = useRef(null)
+  const docRef = useRef(null)
   const baseTextRef = useRef('')
 
   useEffect(() => () => recRef.current?.stop?.(), [])
 
   const submit = () => {
     const text = value.trim()
-    if ((!text && !image) || disabled) return
+    if ((!text && !image && !file) || disabled) return
     haptic('medium')
-    onSend?.({ text: text || 'Describe / extract text from this image.', image: image?.dataUrl, model: prefs.model })
+    let outText = text
+    if (!outText && image) outText = 'Describe / extract text from this image.'
+    if (!outText && file) outText = `Attached file: ${file.name}`
+    onSend?.({
+      text: outText,
+      image: image?.dataUrl,
+      file: file ? { name: file.name } : null,
+      model: prefs.model,
+    })
     setValue('')
     setImage(null)
+    setFile(null)
     if (taRef.current) taRef.current.style.height = 'auto'
   }
 
@@ -73,19 +96,39 @@ export default function Composer({ onSend, disabled = false }) {
   }
 
   const onPickFile = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (!f.type.startsWith('image/')) {
       alert('Please choose an image file.')
       return
     }
+    setFile(null)
     const reader = new FileReader()
-    reader.onload = () => setImage({ dataUrl: reader.result, name: file.name })
-    reader.readAsDataURL(file)
+    reader.onload = () => setImage({ dataUrl: reader.result, name: f.name })
+    reader.readAsDataURL(f)
     e.target.value = ''
+    setPickerOpen(false)
   }
 
-  const canSend = (value.trim().length > 0 || image) && !disabled
+  const onPickDoc = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setImage(null)
+    setFile({ name: f.name, size: f.size })
+    e.target.value = ''
+    setPickerOpen(false)
+  }
+
+  const openPhoto = () => {
+    haptic('light')
+    fileRef.current?.click()
+  }
+  const openDoc = () => {
+    haptic('light')
+    docRef.current?.click()
+  }
+
+  const canSend = (value.trim().length > 0 || image || file) && !disabled
 
   return (
     <div className="card rounded-lg p-3 sm:p-4">
@@ -111,6 +154,25 @@ export default function Composer({ onSend, disabled = false }) {
         </div>
       )}
 
+      {file && (
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2">
+            <FileText size={16} className="text-text-secondary" />
+            <span className="max-w-[180px] truncate text-body-sm text-text-primary">
+              {file.name}
+            </span>
+            <button
+              onClick={() => setFile(null)}
+              className="text-text-tertiary hover:text-danger"
+              aria-label="Remove file"
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+          <span className="text-caption text-text-tertiary">File attached</span>
+        </div>
+      )}
+
       <textarea
         ref={taRef}
         value={value}
@@ -130,14 +192,66 @@ export default function Composer({ onSend, disabled = false }) {
             className="hidden"
             onChange={onPickFile}
           />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="btn-icon h-9 w-9 shrink-0"
-            aria-label="Attach image"
-          >
-            <Plus size={18} strokeWidth={1.75} />
-          </button>
+          <input
+            ref={docRef}
+            type="file"
+            className="hidden"
+            onChange={onPickDoc}
+          />
+
+          {/* Upload picker */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light')
+                setPickerOpen((o) => !o)
+              }}
+              className="btn-icon h-9 w-9"
+              aria-label="Add attachment"
+            >
+              <Plus
+                size={18}
+                strokeWidth={1.75}
+                className={`transition-transform ${pickerOpen ? 'rotate-45' : ''}`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {pickerOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setPickerOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+                    className="absolute bottom-11 left-0 z-50 flex gap-2 rounded-md border border-border bg-surface p-2 shadow-2xl"
+                  >
+                    <button
+                      type="button"
+                      onClick={openPhoto}
+                      className="flex w-24 flex-col items-center gap-2 rounded-md border border-border bg-surface2 p-3 text-center transition-colors hover:bg-border"
+                    >
+                      <ImageTile size={22} className="text-accent-blue" />
+                      <span className="text-body-sm text-text-primary">Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openDoc}
+                      className="flex w-24 flex-col items-center gap-2 rounded-md border border-border bg-surface2 p-3 text-center transition-colors hover:bg-border"
+                    >
+                      <Paperclip size={22} className="text-accent-orange" />
+                      <span className="text-body-sm text-text-primary">Files</span>
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
           <ModelPicker
             value={prefs.model}
             onChange={(id) => setPref('model', id)}

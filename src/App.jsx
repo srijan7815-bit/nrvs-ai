@@ -7,10 +7,13 @@ import Settings from './screens/Settings'
 import Placeholder from './screens/Placeholder'
 import Login from './screens/Login'
 import Memory from './screens/Memory'
+import SharedLinks from './screens/SharedLinks'
+import SharedChat from './screens/SharedChat'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
 import { initMemoryForUser } from './lib/memory'
 import { initProfile } from './lib/profile'
+import { initSharesForUser } from './lib/shares'
 import NameSetup from './components/NameSetup'
 
 /** Returns true if the visitor explicitly chose guest mode. */
@@ -49,6 +52,7 @@ export default function App() {
     initStoreForUser(id)
     initMemoryForUser(id)
     initProfile(cloud ? user : null)
+    initSharesForUser(id)
   }, [user?.id, loading, cloud])
 
   return (
@@ -56,6 +60,8 @@ export default function App() {
     {/* Ask logged-in users without a name to set one (Google users skip this). */}
     {!loading && cloud && user && <NameSetup />}
     <Routes>
+      {/* Public, no-auth shared chat view */}
+      <Route path="/share/:id" element={<SharedChat />} />
       <Route
         path="/login"
         element={
@@ -116,6 +122,14 @@ export default function App() {
         element={
           <Protected>
             <Memory />
+          </Protected>
+        }
+      />
+      <Route
+        path="/shared-links"
+        element={
+          <Protected>
+            <SharedLinks />
           </Protected>
         }
       />

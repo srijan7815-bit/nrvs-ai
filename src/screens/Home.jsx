@@ -1,6 +1,6 @@
 import Layout from '../components/Layout'
 import Composer from '../components/Composer'
-import GrainyLogo from '../components/GrainyLogo'
+import logoUrl from '../assets/nrvs-logo.png'
 import { useChat } from '../lib/useChat'
 import { usePrefs } from '../lib/prefs'
 import { useProfile } from '../lib/profile'
@@ -30,7 +30,12 @@ export default function Home() {
     <Layout>
       <div className="mx-auto flex h-full w-full max-w-content flex-col px-4 sm:px-6">
         <div className="flex flex-1 flex-col items-center justify-center gap-6 py-10">
-          <GrainyLogo height={84} className="text-text-primary" />
+          <img
+            src={logoUrl}
+            alt="NRVS"
+            className="h-16 w-auto select-none sm:h-20"
+            draggable={false}
+          />
           <h1 className="text-center font-serif text-3xl text-text-primary sm:text-4xl lg:text-5xl">
             {greeting()}{firstName ? `, ${firstName}` : ''}
           </h1>
