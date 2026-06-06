@@ -18,7 +18,7 @@ const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
 const VISION_MODEL = 'meta/llama-3.2-11b-vision-instruct'
 const TOOL_MARKER = '\u0000NRVS_TOOL:'
 
-function systemPrompt(memories) {
+function systemPrompt(memories, mcpServers) {
   let p =
     'You are NRVS, a friendly, capable AI assistant. Use Markdown when helpful. ' +
     'When you write a code file, start the fenced block info string with the language and a filename, like ```python:app.py (and ```html:index.html for web apps). ' +
@@ -30,6 +30,11 @@ function systemPrompt(memories) {
     p +=
       '\n\nThings you remember about this user (use when relevant):\n' +
       memories.map((m) => `- ${m}`).join('\n')
+  }
+  if (mcpServers && mcpServers.length) {
+    p +=
+      '\n\nConnected MCP servers available to this user:\n' +
+      mcpServers.map((s) => `- ${s}`).join('\n')
   }
   return p
 }
@@ -51,6 +56,7 @@ export default async function handler(req, res) {
   const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
   const image = typeof body?.image === 'string' ? body.image : null
   const memories = Array.isArray(body?.memories) ? body.memories : []
+  const mcpServers = Array.isArray(body?.mcpServers) ? body.mcpServers : []
   const toolsEnabled = body?.tools !== false && !image // no tools in vision turns
 
   let model = image
@@ -70,7 +76,7 @@ export default async function handler(req, res) {
   }
 
   const convo = [
-    { role: 'system', content: systemPrompt(memories) },
+    { role: 'system', content: systemPrompt(memories, mcpServers) },
     ...buildMessages(messages, image),
   ]
 

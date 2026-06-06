@@ -68,25 +68,36 @@ export async function addMemory(content, source = 'manual') {
   if (memories.some((m) => m.content.toLowerCase() === text.toLowerCase()))
     return null
 
-  if (userId && isCloudEnabled) {
-    const { data, error } = await supabase
-      .from('memories')
-      .insert({ user_id: userId, content: text, source })
-      .select('id,created_at')
-      .single()
-    if (error) return null
-    memories = [
-      { id: data.id, content: text, source, createdAt: Date.now() },
-      ...memories,
-    ]
-    emit()
-    return data.id
-  }
-
-  const id = uid()
-  memories = [{ id, content: text, source, createdAt: Date.now() }, ...memories]
+  // Optimistic: show it immediately with a temp id.
+  const tempId = uid()
+  memories = [
+    { id: tempId, content: text, source, createdAt: Date.now() },
+    ...memories,
+  ]
   emit()
-  return id
+
+  // Try to persist to the cloud; if it fails, keep it locally so it never vanishes.
+  if (userId && isCloudEnabled) {
+    try {
+      const { data, error } = await supabase
+        .from('memories')
+        .insert({ user_id: userId, content: text, source })
+        .select('id')
+        .single()
+      if (!error && data?.id) {
+        memories = memories.map((m) =>
+          m.id === tempId ? { ...m, id: data.id } : m
+        )
+        emit()
+        return data.id
+      }
+    } catch {
+      /* fall through to local persistence */
+    }
+    // cloud failed (e.g. table missing) -> persist locally as a safety net
+    persistLocal()
+  }
+  return tempId
 }
 
 export async function deleteMemory(id) {

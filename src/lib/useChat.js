@@ -10,6 +10,7 @@ import {
   persistMessageContent,
 } from './store'
 import { memoryContext, getMemories, addMemory } from './memory'
+import { getServers } from './mcp'
 
 /**
  * Sends a message + streams the reply, with tool activity, memory injection,
@@ -52,6 +53,9 @@ export function useChat() {
           .map((m) => ({ role: m.role, content: m.content }))
 
         const memList = getMemories().map((m) => m.content)
+        const mcpList = getServers()
+          .filter((s) => s.enabled)
+          .map((s) => `${s.name} (${s.url})`)
 
         setBusy(true)
         const controller = new AbortController()
@@ -65,6 +69,7 @@ export function useChat() {
             model,
             image,
             memories: memList,
+            mcpServers: mcpList,
             signal: controller.signal,
             onToken: (chunk) => {
               acc += chunk

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Volume2, VolumeX, Copy, Check, Brain, AppWindow } from 'lucide-react'
 import Markdown from '../lib/markdown.jsx'
-import Sunburst from './Sunburst'
+import Mark from './Mark'
 import ToolChips from './ToolChips'
 import { USER_INITIAL } from './nav'
 import { modelLabel } from '../lib/models'
@@ -74,7 +74,7 @@ export default function Message({ role, content, image, model, tools, streaming 
     >
       {!isUser && (
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface">
-          <Sunburst size={18} />
+          <Mark size={18} />
         </div>
       )}
 

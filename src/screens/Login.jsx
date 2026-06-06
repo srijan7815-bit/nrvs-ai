@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Mail, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react'
 import Wordmark from '../components/Wordmark'
-import Sunburst from '../components/Sunburst'
 import { useAuth } from '../lib/auth'
 
 function GoogleIcon({ size = 18 }) {
@@ -75,8 +74,7 @@ export default function Login() {
       <div className="relative w-full max-w-[400px]">
         {/* Brand */}
         <div className="mb-9 flex flex-col items-center gap-5 text-center">
-          <Sunburst size={44} />
-          <Wordmark className="text-4xl" />
+          <Wordmark className="text-5xl" />
           <p className="text-body text-text-secondary">
             Sign in to access your NRVS — anywhere.
           </p>

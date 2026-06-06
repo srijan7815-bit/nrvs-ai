@@ -10,6 +10,8 @@ import Memory from './screens/Memory'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
 import { initMemoryForUser } from './lib/memory'
+import { initProfile } from './lib/profile'
+import NameSetup from './components/NameSetup'
 
 /** Returns true if the visitor explicitly chose guest mode. */
 function isGuest() {
@@ -46,9 +48,13 @@ export default function App() {
     const id = cloud ? user?.id ?? null : null
     initStoreForUser(id)
     initMemoryForUser(id)
+    initProfile(cloud ? user : null)
   }, [user?.id, loading, cloud])
 
   return (
+    <>
+    {/* Ask logged-in users without a name to set one (Google users skip this). */}
+    {!loading && cloud && user && <NameSetup />}
     <Routes>
       <Route
         path="/login"
@@ -123,5 +129,6 @@ export default function App() {
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

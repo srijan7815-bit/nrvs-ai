@@ -4,6 +4,7 @@ import { navItems, USER_INITIAL } from './nav'
 import { useThreads, deleteThread } from '../lib/store'
 import Wordmark from './Wordmark'
 import { useAuth } from '../lib/auth'
+import { useProfile } from '../lib/profile'
 
 /**
  * Shared sidebar body used by both the desktop fixed sidebar and the mobile overlay.
@@ -15,7 +16,8 @@ export default function SidebarContent({ onNavigate }) {
   const params = useParams()
   const threads = useThreads()
   const { user } = useAuth()
-  const initial = (user?.email || USER_INITIAL).charAt(0).toUpperCase()
+  const { name } = useProfile()
+  const initial = (name || user?.email || USER_INITIAL).charAt(0).toUpperCase()
 
   const go = (to) => {
     navigate(to)

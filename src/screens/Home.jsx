@@ -1,10 +1,10 @@
 import Layout from '../components/Layout'
 import Composer from '../components/Composer'
-import Sunburst from '../components/Sunburst'
-import UpgradeBanner from '../components/UpgradeBanner'
+import Mark from '../components/Mark'
 import { USER_NAME } from '../components/nav'
 import { useChat } from '../lib/useChat'
 import { usePrefs } from '../lib/prefs'
+import { useProfile } from '../lib/profile'
 
 function greeting() {
   const h = new Date().getHours()
@@ -23,18 +23,16 @@ const SUGGESTIONS = [
 export default function Home() {
   const { send, busy } = useChat()
   const [prefs] = usePrefs()
+  const { name } = useProfile()
+  const firstName = (name || '').split(' ')[0]
 
   return (
     <Layout>
       <div className="mx-auto flex h-full w-full max-w-content flex-col px-4 sm:px-6">
-        <div className="pt-3 lg:pt-6">
-          <UpgradeBanner />
-        </div>
-
         <div className="flex flex-1 flex-col items-center justify-center gap-6 py-10">
-          <Sunburst size={56} />
+          <Mark size={48} className="text-text-secondary" />
           <h1 className="text-center font-serif text-3xl text-text-primary sm:text-4xl lg:text-5xl">
-            {greeting()}, {USER_NAME}
+            {greeting()}{firstName ? `, ${firstName}` : ''}
           </h1>
 
           <div className="grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">

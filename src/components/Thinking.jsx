@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import Sunburst from './Sunburst'
+import Mark from './Mark'
 
 /**
  * "Thinking" indicator shown while waiting for the first token.
@@ -18,7 +18,7 @@ export default function Thinking() {
         transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
         className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface"
       >
-        <Sunburst size={18} />
+        <Mark size={18} />
       </motion.div>
 
       <div className="flex items-center gap-2 pt-1.5">

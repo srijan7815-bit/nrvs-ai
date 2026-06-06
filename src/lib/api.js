@@ -8,6 +8,7 @@ export async function streamChat({
   model,
   image,
   memories,
+  mcpServers,
   onToken,
   onTool,
   signal,
@@ -15,7 +16,7 @@ export async function streamChat({
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, model, image, memories }),
+    body: JSON.stringify({ messages, model, image, memories, mcpServers }),
     signal,
   })
 

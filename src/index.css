@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: dark;
+  --app-font: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 html,
@@ -16,7 +17,7 @@ body {
   margin: 0;
   background: #0f0f0f;
   color: #ffffff;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--app-font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

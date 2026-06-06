@@ -1,11 +1,12 @@
 // Tiny persisted preferences store for Settings toggles/selections.
 import { useCallback, useEffect, useState } from 'react'
+import { applyFont } from './fonts'
 
 const KEY = 'nrvs.prefs.v1'
 const DEFAULTS = {
   haptic: true,
   colorMode: 'System',
-  fontStyle: 'Default',
+  fontId: 'inter',
   model: 'meta/llama-3.3-70b-instruct',
 }
 
@@ -17,6 +18,13 @@ function load() {
   }
 }
 
+// Apply the saved font as early as possible (module load).
+try {
+  applyFont(load().fontId)
+} catch {
+  /* ignore */
+}
+
 export function usePrefs() {
   const [prefs, setPrefs] = useState(load)
 
@@ -26,6 +34,7 @@ export function usePrefs() {
     } catch {
       /* ignore */
     }
+    applyFont(prefs.fontId)
   }, [prefs])
 
   const set = useCallback((key, value) => {
