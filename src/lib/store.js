@@ -267,6 +267,27 @@ export async function renameThread(id, title) {
   }
 }
 
+// Remove the given message and everything after it (used by edit/retry).
+// In cloud mode, deletes those messages from the DB too.
+export async function truncateFromMessage(threadId, msgId) {
+  const t = getThread(threadId)
+  if (!t) return []
+  const idx = t.messages.findIndex((m) => m.id === msgId)
+  if (idx === -1) return []
+  const removed = t.messages.slice(idx)
+  threads = threads.map((x) =>
+    x.id === threadId ? { ...x, messages: x.messages.slice(0, idx) } : x
+  )
+  emit()
+  if (userId && isCloudEnabled) {
+    const ids = removed.map((m) => m.id).filter(Boolean)
+    if (ids.length) {
+      await supabase.from('messages').delete().in('id', ids)
+    }
+  }
+  return removed
+}
+
 export function clearLocal() {
   threads = []
   try {

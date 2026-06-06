@@ -23,7 +23,7 @@ import {
  * Functional chat composer with model toggle, voice input (STT), image attach (OCR/vision),
  * and an upload picker (Photo / Files). Calls onSend({ text, image, file }).
  */
-export default function Composer({ onSend, disabled = false }) {
+export default function Composer({ onSend, onLive, disabled = false }) {
   const [value, setValue] = useState('')
   const [image, setImage] = useState(null) // { dataUrl, name }
   const [file, setFile] = useState(null) // { name, size }
@@ -270,19 +270,29 @@ export default function Composer({ onSend, disabled = false }) {
           >
             <Mic size={18} strokeWidth={1.75} className={listening ? 'animate-pulse' : ''} />
           </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!canSend}
-            className="flex h-9 w-9 items-center justify-center rounded-pill bg-white text-black transition-opacity duration-200 hover:opacity-90 disabled:opacity-40"
-            aria-label={canSend ? 'Send message' : 'Voice mode'}
-          >
-            {canSend ? (
+          {canSend ? (
+            <button
+              type="button"
+              onClick={submit}
+              className="flex h-9 w-9 items-center justify-center rounded-pill bg-white text-black transition-opacity duration-200 hover:opacity-90"
+              aria-label="Send message"
+            >
               <ArrowUp size={18} strokeWidth={2} />
-            ) : (
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                haptic('medium')
+                onLive?.()
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-pill bg-white text-black transition-opacity duration-200 hover:opacity-90"
+              aria-label="Live voice mode"
+              title="Live voice conversation"
+            >
               <AudioLines size={18} strokeWidth={1.75} />
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -75,6 +75,30 @@ export async function streamChat({
   return { text: full, mode }
 }
 
+// Non-streaming chat for Live (voice) mode: returns the full reply text.
+// Tools are disabled for snappier voice turns.
+export async function chatOnce({ messages, model, memories }) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, model, memories, tools: false }),
+  })
+  if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let full = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    full += decoder.decode(value, { stream: true })
+  }
+  // strip any tool markers + the italic "thinking" wrapper for clean speech
+  return full
+    .replace(/\u0000NRVS_TOOL:[^\n]*\n?/g, '')
+    .replace(/_Thinking:[\s\S]*?_/g, '')
+    .trim()
+}
+
 // Run a code block in the E2B sandbox.
 export async function runCodeRemote(code, language) {
   const res = await fetch('/api/run', {

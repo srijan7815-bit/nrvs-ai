@@ -6,6 +6,7 @@ import Composer from '../components/Composer'
 import Message from '../components/Message'
 import Thinking from '../components/Thinking'
 import ShareDialog from '../components/ShareDialog'
+import LiveMode from '../components/LiveMode'
 import { useThread } from '../lib/store'
 import { useChat } from '../lib/useChat'
 import { syncLiveShares } from '../lib/shares'
@@ -13,9 +14,10 @@ import { syncLiveShares } from '../lib/shares'
 export default function Thread() {
   const { id } = useParams()
   const thread = useThread(id)
-  const { send, stop, busy, error } = useChat()
+  const { send, stop, editAndRetry, retry, busy, error } = useChat()
   const bottomRef = useRef(null)
   const [shareOpen, setShareOpen] = useState(false)
+  const [live, setLive] = useState(false)
 
   const messages = thread?.messages || []
   const lastMsg = messages[messages.length - 1]
@@ -69,6 +71,16 @@ export default function Thread() {
                 tools={m.tools}
                 threadId={id}
                 streaming={busy && isLast && m.role === 'assistant'}
+                onEdit={
+                  m.role === 'user' && !busy
+                    ? (text) => editAndRetry(id, m.id, text)
+                    : undefined
+                }
+                onRetry={
+                  m.role === 'assistant' && !busy
+                    ? () => retry(id, m.id)
+                    : undefined
+                }
               />
             )
           })}
@@ -93,7 +105,7 @@ export default function Thread() {
               </button>
             </div>
           )}
-          <Composer onSend={(p) => send(p, id)} disabled={busy} />
+          <Composer onSend={(p) => send(p, id)} onLive={() => setLive(true)} disabled={busy} />
         </div>
       </div>
 
@@ -102,6 +114,7 @@ export default function Thread() {
         threadId={id}
         onClose={() => setShareOpen(false)}
       />
+      <LiveMode open={live} onClose={() => setLive(false)} />
     </Layout>
   )
 }

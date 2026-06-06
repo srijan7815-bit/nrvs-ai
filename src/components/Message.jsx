@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Volume2, VolumeX, Copy, Check, Brain, AppWindow, BookmarkPlus } from 'lucide-react'
+import { Volume2, VolumeX, Copy, Check, Brain, AppWindow, BookmarkPlus, Pencil, RefreshCw, X } from 'lucide-react'
 import Markdown from '../lib/markdown.jsx'
 import Mark from './Mark'
 import ToolChips from './ToolChips'
@@ -12,12 +12,25 @@ import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts
 import { saveToLibrary } from '../lib/library'
 import { haptic } from '../lib/haptics'
 
-export default function Message({ role, content, image, model, tools, streaming, shared, threadId }) {
+export default function Message({
+  role,
+  content,
+  image,
+  model,
+  tools,
+  streaming,
+  shared,
+  threadId,
+  onEdit,
+  onRetry,
+}) {
   const isUser = role === 'user'
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [remembered, setRemembered] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(content)
   const { openArtifact } = useArtifacts()
 
   // Detect a previewable web artifact in assistant messages.
@@ -99,19 +112,72 @@ export default function Message({ role, content, image, model, tools, streaming,
       <div className={isUser ? 'max-w-[80%]' : 'max-w-[85%] pt-1'}>
         {isUser ? (
           <>
-            <div className="rounded-lg rounded-tr-sm border border-border bg-surface2 px-4 py-2.5 text-body text-text-primary">
-              {image && (
-                <img
-                  src={image}
-                  alt="attachment"
-                  className="mb-2 max-h-56 rounded-md border border-border object-contain"
+            {editing ? (
+              <div className="rounded-lg border border-border bg-surface2 p-2">
+                <textarea
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  rows={Math.min(8, (draft.match(/\n/g)?.length || 0) + 2)}
+                  className="w-full resize-none bg-transparent px-2 py-1 text-body text-text-primary focus:outline-none"
                 />
-              )}
-              {content && <span className="whitespace-pre-wrap">{content}</span>}
-            </div>
-            {/* Memory save on user messages */}
-            {content && !shared && (
-              <div className="mt-1 flex justify-end">
+                <div className="mt-1 flex justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      setDraft(content)
+                      setEditing(false)
+                    }}
+                    className="flex items-center gap-1 rounded-pill px-3 py-1.5 text-body-sm text-text-tertiary hover:bg-border"
+                  >
+                    <X size={14} /> Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const next = draft.trim()
+                      setEditing(false)
+                      if (next && next !== content) onEdit?.(next)
+                    }}
+                    className="btn-primary h-8 px-4 text-body-sm"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg rounded-tr-sm border border-border bg-surface2 px-4 py-2.5 text-body text-text-primary">
+                {image && (
+                  <img
+                    src={image}
+                    alt="attachment"
+                    className="mb-2 max-h-56 rounded-md border border-border object-contain"
+                  />
+                )}
+                {content && <span className="whitespace-pre-wrap">{content}</span>}
+              </div>
+            )}
+
+            {/* User message actions */}
+            {content && !shared && !editing && (
+              <div className="mt-1 flex justify-end gap-1">
+                <button
+                  onClick={onCopy}
+                  className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                  title="Copy"
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+                {onEdit && (
+                  <button
+                    onClick={() => {
+                      setDraft(content)
+                      setEditing(true)
+                    }}
+                    className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                    title="Edit & resend"
+                  >
+                    <Pencil size={13} /> Edit
+                  </button>
+                )}
                 <button
                   onClick={onRemember}
                   className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
@@ -122,7 +188,6 @@ export default function Message({ role, content, image, model, tools, streaming,
                   title="Ask NRVS to remember this"
                 >
                   {remembered ? <Check size={13} /> : <Brain size={13} />}
-                  {remembered ? 'Remembered' : 'Remember'}
                 </button>
               </div>
             )}
@@ -173,6 +238,15 @@ export default function Message({ role, content, image, model, tools, streaming,
                 >
                   {remembered ? <Check size={14} /> : <Brain size={14} />}
                 </button>
+                {onRetry && (
+                  <button
+                    onClick={onRetry}
+                    className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                    title="Retry / regenerate"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                )}
               </div>
             )}
 

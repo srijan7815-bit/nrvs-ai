@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import Layout from '../components/Layout'
 import Composer from '../components/Composer'
+import LiveMode from '../components/LiveMode'
 import logoUrl from '../assets/nrvs-logo.png'
 import { useChat } from '../lib/useChat'
 import { usePrefs } from '../lib/prefs'
@@ -25,6 +27,7 @@ export default function Home() {
   const [prefs] = usePrefs()
   const { name } = useProfile()
   const firstName = (name || '').split(' ')[0]
+  const [live, setLive] = useState(false)
 
   return (
     <Layout>
@@ -58,9 +61,10 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-3xl pb-6">
-          <Composer onSend={(p) => send(p)} disabled={busy} />
+          <Composer onSend={(p) => send(p)} onLive={() => setLive(true)} disabled={busy} />
         </div>
       </div>
+      <LiveMode open={live} onClose={() => setLive(false)} />
     </Layout>
   )
 }

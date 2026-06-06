@@ -8,6 +8,7 @@ import {
   updateMessage,
   setMessageTools,
   persistMessageContent,
+  truncateFromMessage,
 } from './store'
 import { memoryContext, getMemories, addMemory } from './memory'
 import { getServers } from './mcp'
@@ -113,7 +114,48 @@ export function useChat() {
 
   const stop = useCallback(() => abortRef.current?.abort(), [])
 
-  return { send, stop, busy, error }
+  // Edit a user message: truncate from it (removing it + everything after) and
+  // re-send the new text. Preserves the original image if any.
+  const editAndRetry = useCallback(
+    async (threadId, msgId, newText) => {
+      const t = getThread(threadId)
+      const orig = t?.messages.find((m) => m.id === msgId)
+      const image = orig?.image || null
+      await truncateFromMessage(threadId, msgId)
+      const lastModel =
+        [...(t?.messages || [])]
+          .reverse()
+          .find((m) => m.role === 'assistant' && m.model)?.model || undefined
+      return send({ text: newText, image, model: lastModel }, threadId)
+    },
+    [send]
+  )
+
+  // Retry: regenerate the assistant reply for the most recent user turn,
+  // or for a specific assistant message (truncate it + resend the prior user msg).
+  const retry = useCallback(
+    async (threadId, assistantMsgId) => {
+      const t = getThread(threadId)
+      if (!t) return
+      const idx = t.messages.findIndex((m) => m.id === assistantMsgId)
+      if (idx <= 0) return
+      // find the user message preceding this assistant reply
+      let userIdx = idx - 1
+      while (userIdx >= 0 && t.messages[userIdx].role !== 'user') userIdx--
+      if (userIdx < 0) return
+      const userMsg = t.messages[userIdx]
+      const model = t.messages[idx].model || undefined
+      // remove the user message + everything after, then resend it
+      await truncateFromMessage(threadId, userMsg.id)
+      return send(
+        { text: userMsg.content, image: userMsg.image || null, model },
+        threadId
+      )
+    },
+    [send]
+  )
+
+  return { send, stop, editAndRetry, retry, busy, error }
 }
 
 // Look at the latest user+assistant turn and quietly save any durable facts.
