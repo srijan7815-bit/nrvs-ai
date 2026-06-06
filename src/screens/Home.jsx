@@ -1,10 +1,10 @@
 import Layout from '../components/Layout'
 import Composer from '../components/Composer'
-import Mark from '../components/Mark'
-import { USER_NAME } from '../components/nav'
+import GrainyLogo from '../components/GrainyLogo'
 import { useChat } from '../lib/useChat'
 import { usePrefs } from '../lib/prefs'
 import { useProfile } from '../lib/profile'
+import { haptic } from '../lib/haptics'
 
 function greeting() {
   const h = new Date().getHours()
@@ -30,7 +30,7 @@ export default function Home() {
     <Layout>
       <div className="mx-auto flex h-full w-full max-w-content flex-col px-4 sm:px-6">
         <div className="flex flex-1 flex-col items-center justify-center gap-6 py-10">
-          <Mark size={48} className="text-text-secondary" />
+          <GrainyLogo height={84} className="text-text-primary" />
           <h1 className="text-center font-serif text-3xl text-text-primary sm:text-4xl lg:text-5xl">
             {greeting()}{firstName ? `, ${firstName}` : ''}
           </h1>
@@ -39,7 +39,10 @@ export default function Home() {
             {SUGGESTIONS.map((s) => (
               <button
                 key={s}
-                onClick={() => send({ text: s, model: prefs.model })}
+                onClick={() => {
+                  haptic('light')
+                  send({ text: s, model: prefs.model })
+                }}
                 disabled={busy}
                 className="card card-hover rounded-md px-4 py-3 text-left text-body-sm text-text-secondary disabled:opacity-50"
               >

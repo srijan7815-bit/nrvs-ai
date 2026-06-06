@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Plus, Mic, AudioLines, ArrowUp, X, ImageIcon } from 'lucide-react'
 import ModelPicker from './ModelPicker'
 import { usePrefs } from '../lib/prefs'
+import { haptic } from '../lib/haptics'
 import {
   createRecognizer,
   speechSupported,
@@ -26,6 +27,7 @@ export default function Composer({ onSend, disabled = false }) {
   const submit = () => {
     const text = value.trim()
     if ((!text && !image) || disabled) return
+    haptic('medium')
     onSend?.({ text: text || 'Describe / extract text from this image.', image: image?.dataUrl, model: prefs.model })
     setValue('')
     setImage(null)
@@ -47,6 +49,7 @@ export default function Composer({ onSend, disabled = false }) {
   }
 
   const toggleMic = () => {
+    haptic('light')
     if (!speechSupported()) {
       alert('Voice input is not supported in this browser. Try Chrome or Edge.')
       return

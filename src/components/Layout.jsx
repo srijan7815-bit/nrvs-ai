@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import SidebarContent from './SidebarContent'
 import MobileHeader from './MobileHeader'
-import MobileTabBar from './MobileTabBar'
 
 /**
  * Responsive shell.
@@ -69,11 +68,6 @@ export default function Layout({ children, mobileHeaderRight }) {
         </div>
 
         <main className="flex-1 overflow-y-auto">{children}</main>
-
-        {/* Mobile bottom bar */}
-        <div className="lg:hidden">
-          <MobileTabBar />
-        </div>
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { haptic } from '../lib/haptics'
 
 /**
  * Toggle switch.
@@ -12,7 +13,10 @@ export default function Toggle({ checked, onChange, label }) {
       role="switch"
       aria-checked={checked}
       aria-label={label}
-      onClick={() => onChange?.(!checked)}
+      onClick={() => {
+        haptic('select')
+        onChange?.(!checked)
+      }}
       className="relative inline-flex shrink-0 items-center rounded-pill transition-colors duration-200 ease-smooth focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/60"
       style={{
         width: 44,

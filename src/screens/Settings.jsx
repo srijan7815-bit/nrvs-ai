@@ -20,11 +20,13 @@ import {
 } from 'lucide-react'
 import Toggle from '../components/Toggle'
 import Layout from '../components/Layout'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { usePrefs } from '../lib/prefs'
 import { clearLocal } from '../lib/store'
 import { useAuth } from '../lib/auth'
 import { useProfile, saveName } from '../lib/profile'
 import { FONT_OPTIONS } from '../lib/fonts'
+import { hapticTest, haptic } from '../lib/haptics'
 import {
   useMcpServers,
   addServer,
@@ -77,12 +79,10 @@ export default function Settings() {
   const [nameDraft, setNameDraft] = useState(name || '')
   const [mcpName, setMcpName] = useState('')
   const [mcpUrl, setMcpUrl] = useState('')
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
-  const handleLogout = async () => {
-    const msg = cloud
-      ? 'Log out of your NRVS account on this device?'
-      : 'Exit guest mode? Your local threads on this device will be cleared.'
-    if (!window.confirm(msg)) return
+  const doLogout = async () => {
+    haptic('warning')
     if (cloud) {
       await signOut()
     } else {
@@ -94,6 +94,7 @@ export default function Settings() {
         /* ignore */
       }
     }
+    setConfirmLogout(false)
     navigate('/login')
   }
 
@@ -290,14 +291,22 @@ export default function Settings() {
           <Row
             icon={Smartphone}
             label="Haptic feedback"
+            sub="Vibrate on actions"
             right={
               <Toggle
                 checked={prefs.haptic}
-                onChange={(v) => setPref('haptic', v)}
+                onChange={(v) => {
+                  setPref('haptic', v)
+                  if (v) hapticTest() // let them feel it immediately
+                }}
                 label="Haptic feedback"
               />
             }
-            onClick={() => setPref('haptic', !prefs.haptic)}
+            onClick={() => {
+              const next = !prefs.haptic
+              setPref('haptic', next)
+              if (next) hapticTest()
+            }}
           />
           <Row icon={Lock} label="Privacy" />
           <Row icon={LinkIcon} label="Shared links" />
@@ -310,10 +319,24 @@ export default function Settings() {
             label={cloud ? 'Log out' : 'Exit guest mode'}
             danger
             right={<span />}
-            onClick={handleLogout}
+            onClick={() => setConfirmLogout(true)}
           />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmLogout}
+        title={cloud ? 'Log out?' : 'Exit guest mode?'}
+        message={
+          cloud
+            ? 'You’ll need to sign in again to access your NRVS on this device.'
+            : 'Your local threads on this device will be cleared.'
+        }
+        confirmLabel={cloud ? 'Log out' : 'Exit'}
+        danger
+        onConfirm={doLogout}
+        onCancel={() => setConfirmLogout(false)}
+      />
     </Layout>
   )
 }
