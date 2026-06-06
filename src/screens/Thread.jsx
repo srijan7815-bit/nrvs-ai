@@ -44,9 +44,16 @@ export default function Thread() {
       <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 sm:px-6">
         {/* Thread header with share */}
         <div className="flex items-center justify-between gap-2 border-b border-border/60 py-3">
-          <h2 className="min-w-0 flex-1 truncate text-body font-medium text-text-primary">
-            {thread.title}
-          </h2>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="min-w-0 truncate text-body font-medium text-text-primary">
+              {thread.title}
+            </h2>
+            {thread.shared && (
+              <span className="shrink-0 rounded-pill border border-border bg-surface2 px-2 py-0.5 text-caption uppercase tracking-wide text-text-tertiary">
+                Shared
+              </span>
+            )}
+          </div>
           <button
             onClick={() => setShareOpen(true)}
             className="btn-icon flex h-9 items-center gap-1.5 px-3 text-body-sm text-text-secondary"

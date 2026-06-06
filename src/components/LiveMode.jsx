@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Mic, MicOff } from 'lucide-react'
+import { X, Mic, MicOff, Square, PhoneOff } from 'lucide-react'
 import { createRecognizer, speechSupported, speak, stopSpeaking, ttsSupported } from '../lib/speech'
 import { chatOnce } from '../lib/api'
 import { getMemories } from '../lib/memory'
@@ -13,11 +13,13 @@ export default function LiveMode({ open, onClose }) {
   const [transcript, setTranscript] = useState('')
   const [reply, setReply] = useState('')
   const [error, setError] = useState('')
+  const [muted, setMuted] = useState(false)
   const [prefs] = usePrefs()
 
   const recRef = useRef(null)
   const historyRef = useRef([]) // {role, content}
   const activeRef = useRef(false)
+  const mutedRef = useRef(false)
 
   const supported = speechSupported() && ttsSupported()
 
@@ -52,6 +54,10 @@ export default function LiveMode({ open, onClose }) {
 
   function startListening() {
     if (!activeRef.current) return
+    if (mutedRef.current) {
+      setPhase('muted')
+      return
+    }
     setTranscript('')
     setPhase('listening')
     const rec = createRecognizer({
@@ -121,8 +127,36 @@ export default function LiveMode({ open, onClose }) {
     window.speechSynthesis.speak(u)
   }
 
+  // Interrupt: stop NRVS speaking and immediately go back to listening.
+  function interrupt() {
+    haptic('medium')
+    stopSpeaking()
+    if (activeRef.current && !mutedRef.current) startListening()
+  }
+
+  // Mute: stop the mic (and any current recognition). Unmute resumes listening.
+  function toggleMute() {
+    haptic('select')
+    const next = !mutedRef.current
+    mutedRef.current = next
+    setMuted(next)
+    if (next) {
+      try {
+        recRef.current?.stop()
+      } catch {
+        /* ignore */
+      }
+      // don't change phase while NRVS is speaking; otherwise show muted
+      if (phase !== 'speaking') setPhase('muted')
+    } else {
+      if (phase !== 'speaking') startListening()
+    }
+  }
+
   const label =
-    phase === 'listening'
+    phase === 'muted'
+      ? 'Muted'
+      : phase === 'listening'
       ? 'Listening…'
       : phase === 'thinking'
       ? 'Thinking…'
@@ -211,9 +245,43 @@ export default function LiveMode({ open, onClose }) {
                 <p className="mt-3 text-body-sm text-danger">{error}</p>
               )}
 
+              {/* Controls: Mute + Interrupt + End */}
+              <div className="absolute bottom-20 flex items-center gap-4">
+                <button
+                  onClick={toggleMute}
+                  className={`flex h-14 w-14 items-center justify-center rounded-full border transition-colors ${
+                    muted
+                      ? 'border-danger bg-danger/15 text-danger'
+                      : 'border-border bg-surface text-text-primary hover:bg-border'
+                  }`}
+                  title={muted ? 'Unmute mic' : 'Mute mic'}
+                  aria-label={muted ? 'Unmute' : 'Mute'}
+                >
+                  {muted ? <MicOff size={22} /> : <Mic size={22} />}
+                </button>
+
+                <button
+                  onClick={interrupt}
+                  disabled={phase !== 'speaking'}
+                  className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-surface text-text-primary transition-colors hover:bg-border disabled:opacity-30"
+                  title="Interrupt NRVS"
+                  aria-label="Interrupt"
+                >
+                  <Square size={20} fill="currentColor" strokeWidth={0} />
+                </button>
+
+                <button
+                  onClick={onClose}
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-danger text-white transition-opacity hover:opacity-90"
+                  title="End live mode"
+                  aria-label="End"
+                >
+                  <PhoneOff size={20} />
+                </button>
+              </div>
+
               <p className="absolute bottom-8 flex items-center gap-1.5 text-caption text-text-tertiary">
-                <Mic size={12} /> Speak naturally — NRVS replies out loud. Tap ✕
-                to end.
+                Mute · Interrupt · End
               </p>
             </>
           )}

@@ -1,14 +1,33 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { Loader2, MessageSquarePlus } from 'lucide-react'
 import logoUrl from '../assets/nrvs-logo.png'
 import Message from '../components/Message'
 import { fetchSharedChat } from '../lib/shares'
+import { importSharedThread } from '../lib/store'
 
 /** Public, no-auth view of a shared conversation. */
 export default function SharedChat() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [data, setData] = useState(undefined) // undefined=loading, null=not found
+  const [continuing, setContinuing] = useState(false)
+
+  const onContinue = async () => {
+    if (!data) return
+    setContinuing(true)
+    try {
+      const newId = await importSharedThread({
+        title: data.title,
+        messages: data.messages,
+      })
+      navigate(`/thread/${newId}`)
+    } catch {
+      setContinuing(false)
+      alert('Please sign in first to continue this chat.')
+      navigate('/login')
+    }
+  }
 
   useEffect(() => {
     let on = true
@@ -49,12 +68,18 @@ export default function SharedChat() {
           <img src={logoUrl} alt="NRVS" className="h-6 w-auto" />
           <span className="text-body-sm text-text-tertiary">Shared chat</span>
         </div>
-        <Link
-          to="/"
-          className="btn-icon h-9 px-4 text-body-sm"
+        <button
+          onClick={onContinue}
+          disabled={continuing}
+          className="btn-primary h-9 px-4 text-body-sm disabled:opacity-60"
         >
-          Try NRVS
-        </Link>
+          {continuing ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <MessageSquarePlus size={15} />
+          )}
+          Continue chat
+        </button>
       </header>
 
       <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
@@ -75,9 +100,23 @@ export default function SharedChat() {
             ))}
           </div>
         )}
-        <p className="mt-10 border-t border-border pt-6 text-center text-caption text-text-tertiary">
-          This is a read-only conversation shared from NRVS.
-        </p>
+        <div className="mt-10 flex flex-col items-center gap-3 border-t border-border pt-6 text-center">
+          <p className="text-caption text-text-tertiary">
+            Shared from NRVS. Pick up where it left off in your own copy.
+          </p>
+          <button
+            onClick={onContinue}
+            disabled={continuing}
+            className="btn-primary h-10 px-5 text-body-sm disabled:opacity-60"
+          >
+            {continuing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <MessageSquarePlus size={16} />
+            )}
+            Continue this chat
+          </button>
+        </div>
       </div>
     </div>
   )

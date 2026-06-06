@@ -78,12 +78,17 @@ export default function SidebarContent({ onNavigate }) {
                 >
                   <button
                     onClick={() => go(`/thread/${t.id}`)}
-                    className={`min-w-0 flex-1 truncate px-3 py-2 text-left text-body-sm ${
+                    className={`flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2 text-left text-body-sm ${
                       active ? 'text-text-primary' : 'text-text-secondary'
                     }`}
                     title={t.title}
                   >
-                    {t.title}
+                    <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                    {t.shared && (
+                      <span className="shrink-0 rounded-pill border border-border bg-surface2 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-tertiary">
+                        Shared
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={(e) => {

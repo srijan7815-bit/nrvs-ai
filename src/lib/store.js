@@ -61,10 +61,20 @@ export async function initStoreForUser(id) {
 
 export async function refreshFromCloud() {
   if (!userId || !isCloudEnabled) return
-  const { data: t } = await supabase
+  // Try selecting the optional `shared` column; fall back if the migration
+  // hasn't been run yet.
+  let t = null
+  let res = await supabase
     .from('threads')
-    .select('id,title,created_at,updated_at')
+    .select('id,title,shared,created_at,updated_at')
     .order('updated_at', { ascending: false })
+  if (res.error) {
+    res = await supabase
+      .from('threads')
+      .select('id,title,created_at,updated_at')
+      .order('updated_at', { ascending: false })
+  }
+  t = res.data
 
   const ids = (t || []).map((x) => x.id)
   let msgs = []
@@ -79,6 +89,7 @@ export async function refreshFromCloud() {
   threads = (t || []).map((th) => ({
     id: th.id,
     title: th.title,
+    shared: th.shared || false,
     createdAt: new Date(th.created_at).getTime(),
     updatedAt: new Date(th.updated_at).getTime(),
     messages: msgs
@@ -146,6 +157,81 @@ export async function createThread(firstMessage) {
   const id = uid()
   threads = [
     { id, title, createdAt: Date.now(), updatedAt: Date.now(), messages: [] },
+    ...threads,
+  ]
+  emit()
+  return id
+}
+
+// Import a shared conversation into the current user's threads (for "Continue this chat").
+// Copies all messages and marks the thread as `shared`. Returns the new thread id.
+export async function importSharedThread({ title, messages }) {
+  const t = title || 'Shared chat'
+  const msgs = (messages || []).map((m) => ({
+    role: m.role,
+    content: m.content || '',
+    image: m.image || null,
+    model: m.model || null,
+  }))
+
+  if (userId && isCloudEnabled) {
+    let ins = await supabase
+      .from('threads')
+      .insert({ user_id: userId, title: t, shared: true })
+      .select('id')
+      .single()
+    if (ins.error) {
+      // `shared` column may not exist yet — insert without it
+      ins = await supabase
+        .from('threads')
+        .insert({ user_id: userId, title: t })
+        .select('id')
+        .single()
+    }
+    if (ins.error) throw ins.error
+    const threadId = ins.data.id
+    let inserted = []
+    if (msgs.length) {
+      const rows = msgs.map((m) => ({
+        thread_id: threadId,
+        user_id: userId,
+        role: m.role,
+        content: m.content,
+        image: m.image,
+        model: m.model,
+      }))
+      const { data } = await supabase.from('messages').insert(rows).select('id')
+      inserted = data || []
+    }
+    threads = [
+      {
+        id: threadId,
+        title: t,
+        shared: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: msgs.map((m, i) => ({
+          id: inserted[i]?.id || uid(),
+          ...m,
+        })),
+      },
+      ...threads,
+    ]
+    emit()
+    return threadId
+  }
+
+  // local
+  const id = uid()
+  threads = [
+    {
+      id,
+      title: t,
+      shared: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: msgs.map((m) => ({ id: uid(), ...m })),
+    },
     ...threads,
   ]
   emit()
