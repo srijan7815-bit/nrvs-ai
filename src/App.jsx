@@ -25,7 +25,7 @@ import { initSecretsForUser } from './lib/secrets'
 import { initProjectsForUser } from './lib/projects'
 import { initApiKeysForUser } from './lib/apikeys'
 import { initFlowsForUser } from './lib/flows'
-import NameSetup from './components/NameSetup'
+import Onboarding from './components/Onboarding'
 
 /** Returns true if the visitor explicitly chose guest mode. */
 function isGuest() {
@@ -74,7 +74,7 @@ export default function App() {
   return (
     <>
     {/* Ask logged-in users without a name to set one (Google users skip this). */}
-    {!loading && cloud && user && <NameSetup />}
+    {!loading && cloud && user && <Onboarding />}
     <Routes>
       {/* Public, no-auth shared chat view */}
       <Route path="/share/:id" element={<SharedChat />} />

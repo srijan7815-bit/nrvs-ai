@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { streamChat, extractMemories } from './api'
+import { streamChat, extractMemories, generateSite } from './api'
 import {
   addMessage,
   createThread,
@@ -14,6 +14,11 @@ import { getMemories, addMemory } from './memory'
 import { getServers } from './mcp'
 import { filesForProject } from './projects'
 import { setBusy, setError, useBusy } from './busy'
+import { getProviderKey } from './providers'
+
+// Detect a "build me a website/app/page/landing/site" request.
+const SITE_INTENT =
+  /\b(build|make|create|design|generate|code)\b[\s\S]{0,40}\b(website|web ?site|web ?app|web ?page|landing ?page|portfolio site|homepage|site for|webpage)\b/i
 
 // Abort controllers keyed by threadId so stop() works from any screen/instance.
 const controllers = new Map()
@@ -102,6 +107,46 @@ export function useChat(scopeThreadId) {
         controllers.set(threadId, controller)
         let acc = ''
         const toolEvents = []
+
+        // ── Website build path: use FUISHAN (if Google key) or rich native gen ──
+        const isSiteBuild = SITE_INTENT.test(displayText || '')
+        if (isSiteBuild) {
+          try {
+            const googleKey = getProviderKey('googleai')
+            const { source } = await generateSite({
+              prompt: sendText,
+              googleKey,
+              model,
+              signal: controller.signal,
+              onToken: (full) => {
+                const code = full
+                  .replace(/^[\s\S]*?__END_BRIEF__\n?/, '')
+                  .replace(/__NRVS_SOURCE__\w+\n?/, '')
+                  .replace(/^\s+/, '')
+                updateMessage(threadId, assistantId, code || '_Building your site…_')
+              },
+            })
+            const cur = getThread(threadId)?.messages.find((x) => x.id === assistantId)
+            let finalText = (cur?.content || '').trim() || '_(No site generated.)_'
+            const tag =
+              source === 'fuishan'
+                ? '_Generated with FUISHAN. Open the preview below._\n\n'
+                : ''
+            finalText = tag + finalText
+            updateMessage(threadId, assistantId, finalText)
+            await persistMessageContent(assistantId, finalText)
+          } catch (err) {
+            if (err.name !== 'AbortError') {
+              const t = `_Couldn't build the site: ${err.message}_`
+              updateMessage(threadId, assistantId, t)
+              await persistMessageContent(assistantId, t)
+            }
+          } finally {
+            setBusy(threadId, false)
+            controllers.delete(threadId)
+          }
+          return threadId
+        }
 
         try {
           await streamChat({

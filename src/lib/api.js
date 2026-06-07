@@ -99,6 +99,39 @@ export async function chatOnce({ messages, model, memories }) {
     .trim()
 }
 
+// Generate a full website (FUISHAN when a Google key is given, else native NRVS).
+// Streams; calls onToken with code chunks. Returns { text, source, brief }.
+export async function generateSite({ prompt, googleKey, model, onToken, signal }) {
+  const res = await fetch('/api/site', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, googleKey, model }),
+    signal,
+  })
+  if (!res.ok || !res.body) throw new Error('Site generation failed.')
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let full = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    full += decoder.decode(value, { stream: true })
+    onToken?.(full)
+  }
+  // parse out brief + source markers
+  let brief = ''
+  const bm = full.match(/__NRVS_BRIEF__([\s\S]*?)__END_BRIEF__/)
+  if (bm) brief = bm[1].trim()
+  let source = 'native'
+  const sm = full.match(/__NRVS_SOURCE__(\w+)/)
+  if (sm) source = sm[1]
+  const code = full
+    .replace(/^[\s\S]*?__END_BRIEF__\n?/, '')
+    .replace(/__NRVS_SOURCE__\w+\n?/, '')
+    .replace(/^\s+/, '')
+  return { text: code, source, brief }
+}
+
 // Boot a live server for a fullstack/backend artifact in an E2B sandbox.
 export async function serveArtifact(files) {
   const res = await fetch('/api/serve', {

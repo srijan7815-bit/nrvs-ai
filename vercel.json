@@ -9,6 +9,7 @@
     "api/serve.js": { "maxDuration": 60 },
     "api/flow.js": { "maxDuration": 60 },
     "api/flow-exec.js": { "maxDuration": 60 },
+    "api/site.js": { "maxDuration": 60 },
     "api/memory-extract.js": { "maxDuration": 30 }
   },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]

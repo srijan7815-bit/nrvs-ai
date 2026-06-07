@@ -3,8 +3,9 @@ import { useSyncExternalStore } from 'react'
 import { supabase, isCloudEnabled } from './supabase'
 
 const LS_NAME = 'nrvs.displayName'
+const LS_CONSENT = 'nrvs.consent.v1'
 
-let state = { name: null, ready: false }
+let state = { name: null, consent: false, ready: false }
 let userId = null
 const listeners = new Set()
 
@@ -25,9 +26,12 @@ export async function initProfile(user) {
     user?.user_metadata?.name ||
     null
 
+  const localConsent = localStorage.getItem(LS_CONSENT) === '1'
+
   if (!userId || !isCloudEnabled) {
     state = {
       name: localStorage.getItem(LS_NAME) || metaName || null,
+      consent: localConsent,
       ready: true,
     }
     emit()
@@ -53,8 +57,22 @@ export async function initProfile(user) {
     saveName(metaName)
   }
 
-  state = { name: name || localStorage.getItem(LS_NAME) || null, ready: true }
+  state = {
+    name: name || localStorage.getItem(LS_NAME) || null,
+    consent: localConsent,
+    ready: true,
+  }
   emit()
+}
+
+export function setConsent(v) {
+  state = { ...state, consent: !!v }
+  emit()
+  try {
+    localStorage.setItem(LS_CONSENT, v ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function saveName(name) {
@@ -64,6 +82,7 @@ export async function saveName(name) {
   emit()
   try {
     localStorage.setItem(LS_NAME, clean)
+    /* name */
   } catch {
     /* ignore */
   }
