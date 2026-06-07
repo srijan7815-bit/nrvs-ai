@@ -33,9 +33,11 @@ export default async function handler(req, res) {
   if (typeof res.flush === 'function') res.flush()
 
   try {
-    // 1) Enhance the prompt with NRVS (NVIDIA) so FUISHAN/native gets rich detail.
+    // 1) Enhance the prompt — only needed for FUISHAN delegation (it gets a
+    //    single user message). For native gen we fold richness into the system
+    //    prompt to save a round-trip (keeps generation within the time limit).
     let enhanced = prompt
-    if (apiKey) {
+    if (apiKey && googleKey) {
       try {
         const r = await fetch(`${baseURL}/chat/completions`, {
           method: 'POST',
@@ -61,10 +63,9 @@ export default async function handler(req, res) {
       } catch {
         /* keep original */
       }
+      res.write('\n__NRVS_BRIEF__' + enhanced + '__END_BRIEF__\n')
+      if (typeof res.flush === 'function') res.flush()
     }
-
-    res.write('\n__NRVS_BRIEF__' + enhanced + '__END_BRIEF__\n')
-    if (typeof res.flush === 'function') res.flush()
 
     // 2) If Google key present, delegate to FUISHAN.
     if (googleKey) {
