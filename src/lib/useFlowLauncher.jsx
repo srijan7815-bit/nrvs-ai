@@ -20,6 +20,16 @@ export function useFlowLauncher() {
       haptic('medium')
       try {
         const mission = await generateMission(objective.trim(), model)
+        // Guard: don't create a broken/empty mission (e.g. generation timed out).
+        const total =
+          (mission?.tasks?.length || 0) +
+          (mission?.roadmap?.length || 0) +
+          (mission?.timeline?.length || 0)
+        if (!mission || total === 0) {
+          throw new Error(
+            'NRVS couldn’t finish planning that objective in time. Please try again — rephrasing more specifically can help.'
+          )
+        }
         const id = await createFlow(objective.trim(), { ...mission, status: 'review' })
         navigate(`/flow/${id}`)
       } catch (e) {
@@ -31,11 +41,32 @@ export function useFlowLauncher() {
     [navigate]
   )
 
-  const overlay = launching ? <FlowOverlay /> : null
+  const overlay =
+    launching || error ? (
+      <FlowOverlay error={error} onDismiss={() => setError('')} />
+    ) : null
   return { launch, launching, error, overlay }
 }
 
-function FlowOverlay() {
+function FlowOverlay({ error, onDismiss }) {
+  if (error) {
+    return (
+      <div className="fixed inset-0 z-[85] flex flex-col items-center justify-center gap-4 bg-bg/95 px-6 text-center backdrop-blur-sm">
+        <div className="max-w-sm">
+          <p className="text-heading-md font-semibold text-text-primary">
+            Flow State hiccup
+          </p>
+          <p className="mt-2 text-body-sm text-text-secondary">{error}</p>
+          <button
+            onClick={onDismiss}
+            className="btn-primary mx-auto mt-5 h-10 px-6 text-body-sm"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="fixed inset-0 z-[85] flex flex-col items-center justify-center gap-5 bg-bg/95 px-6 text-center backdrop-blur-sm">
       <div className="relative flex h-24 w-24 items-center justify-center">

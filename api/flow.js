@@ -22,10 +22,10 @@ Return STRICT JSON ONLY (no markdown, no prose) with EXACTLY this shape:
 }
 
 Rules:
-- 4-6 roadmap phases, 8-14 concrete tasks (mix of priorities, all status "todo"),
-  4-7 research items, 3-6 documents, 4-7 timeline milestones, 3-5 metrics.
-- Be specific and tailored to the objective, not generic.
-- Output ONLY the JSON object.`
+- 4-5 roadmap phases, 8-12 concrete tasks (mix of priorities, all status "todo"),
+  4-6 research items, 3-5 documents, 4-6 timeline milestones, 3-4 metrics.
+- Keep each text value concise (one line). Be specific and tailored, not generic.
+- Output ONLY the compact JSON object, no extra whitespace, no markdown.`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -55,8 +55,8 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.7,
-        max_tokens: 3000,
+        temperature: 0.6,
+        max_tokens: 2200,
         messages: [
           { role: 'system', content: SYS },
           { role: 'user', content: `OBJECTIVE: ${objective}` },
