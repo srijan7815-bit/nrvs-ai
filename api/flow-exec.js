@@ -92,7 +92,9 @@ export default async function handler(req, res) {
           role: 'tool',
           tool_call_id: tc.id,
           name,
-          content: JSON.stringify(result).slice(0, 6000),
+          // IMPORTANT: cap each string field BEFORE serializing, then serialize,
+          // so the JSON is never cut mid-string (which caused model 400 errors).
+          content: safeToolContent(result),
         })
       }
     }
@@ -138,6 +140,38 @@ async function call(baseURL, apiKey, model, messages, { tools, maxTokens } = {})
     throw new Error(`model ${status}: ${t.slice(0, 100)}`)
   }
   throw new Error(`${lastErr}: rate limited (retries exhausted)`)
+}
+
+// Build a tool result string that is ALWAYS valid (cap fields, not raw JSON).
+function safeToolContent(result) {
+  const cap = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s)
+  let safe = result
+  if (result && typeof result === 'object') {
+    safe = {}
+    for (const [k, v] of Object.entries(result)) {
+      if (typeof v === 'string') safe[k] = cap(v, 3000)
+      else if (Array.isArray(v)) {
+        safe[k] = v.slice(0, 8).map((it) =>
+          it && typeof it === 'object'
+            ? Object.fromEntries(
+                Object.entries(it).map(([ik, iv]) => [ik, cap(iv, 1200)])
+              )
+            : cap(it, 1200)
+        )
+      } else safe[k] = v
+    }
+  }
+  let out = ''
+  try {
+    out = JSON.stringify(safe)
+  } catch {
+    return '{"note":"result omitted"}'
+  }
+  // If still too large, return a valid JSON object with a truncated text field.
+  if (out.length > 9000) {
+    return JSON.stringify({ truncated: true, text: out.slice(0, 8000) })
+  }
+  return out
 }
 
 function readJson(req) {

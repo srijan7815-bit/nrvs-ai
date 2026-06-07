@@ -170,7 +170,7 @@ export default async function handler(req, res) {
           role: 'tool',
           tool_call_id: tc.id,
           name,
-          content: JSON.stringify(result).slice(0, 6000),
+          content: safeToolContent(result),
         })
       }
     }
@@ -312,6 +312,31 @@ function buildMessages(messages, image) {
     }
   }
   return mapped
+}
+
+// Cap string fields BEFORE serializing so tool JSON is never cut mid-string.
+function safeToolContent(result) {
+  const cap = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s)
+  let safe = result
+  if (result && typeof result === 'object') {
+    safe = {}
+    for (const [k, v] of Object.entries(result)) {
+      if (typeof v === 'string') safe[k] = cap(v, 3000)
+      else if (Array.isArray(v)) {
+        safe[k] = v.slice(0, 8).map((it) =>
+          it && typeof it === 'object'
+            ? Object.fromEntries(Object.entries(it).map(([ik, iv]) => [ik, cap(iv, 1200)]))
+            : cap(it, 1200)
+        )
+      } else safe[k] = v
+    }
+  }
+  try {
+    const out = JSON.stringify(safe)
+    return out.length > 9000 ? JSON.stringify({ truncated: true, text: out.slice(0, 8000) }) : out
+  } catch {
+    return '{"note":"result omitted"}'
+  }
 }
 
 function readJson(req) {
