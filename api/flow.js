@@ -46,8 +46,15 @@ export default async function handler(req, res) {
   const model = body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
   const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
 
+  // Stream the model output so the gateway never times out (no 504). The client
+  // accumulates the text and parses the JSON mission at the end.
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.write(' ') // immediate keep-alive byte
+  if (typeof res.flush === 'function') res.flush()
+
   try {
-    const r = await fetch(`${baseURL}/chat/completions`, {
+    const upstream = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,6 +62,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
+        stream: true,
         temperature: 0.6,
         max_tokens: 2200,
         messages: [
@@ -63,19 +71,45 @@ export default async function handler(req, res) {
         ],
       }),
     })
-    if (!r.ok) {
-      const t = await r.text().catch(() => '')
-      res.status(502).json({ error: `Model error ${r.status}: ${t.slice(0, 120)}` })
+    if (!upstream.ok || !upstream.body) {
+      res.write('\n__NRVS_FLOW_ERROR__')
+      res.end()
       return
     }
-    const data = await r.json()
-    const content = data?.choices?.[0]?.message?.content || ''
-    const mission = parseMission(content, objective)
-    res.status(200).json({ mission })
+    const reader = upstream.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const t = line.trim()
+        if (!t.startsWith('data:')) continue
+        const d = t.slice(5).trim()
+        if (d === '[DONE]') continue
+        try {
+          const tok = JSON.parse(d)?.choices?.[0]?.delta?.content
+          if (tok) {
+            res.write(tok)
+            if (typeof res.flush === 'function') res.flush()
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    res.end()
   } catch (e) {
-    res.status(502).json({ error: 'Could not generate the mission.' })
+    res.write('\n__NRVS_FLOW_ERROR__')
+    res.end()
   }
 }
+
+// Exported so the client can reuse the exact same parser.
+export { parseMission }
 
 function parseMission(text, objective) {
   let obj = null

@@ -131,24 +131,55 @@ export function useFlow(id) {
   )
 }
 
-// API call to generate a mission for an objective.
+// Parse the streamed model output into a normalized mission object.
+function parseMissionText(text, objective) {
+  let obj = null
+  try {
+    const m = text.match(/\{[\s\S]*\}/)
+    obj = JSON.parse(m ? m[0] : text)
+  } catch {
+    obj = {}
+  }
+  const arr = (x) => (Array.isArray(x) ? x : [])
+  return {
+    title: obj.title || objective.slice(0, 60),
+    summary: obj.summary || '',
+    roadmap: arr(obj.roadmap),
+    tasks: arr(obj.tasks).map((t) => ({
+      title: t.title || String(t),
+      status: t.status === 'done' || t.status === 'doing' ? t.status : 'todo',
+      priority: ['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium',
+    })),
+    research: arr(obj.research),
+    documents: arr(obj.documents),
+    timeline: arr(obj.timeline),
+    metrics: arr(obj.metrics),
+  }
+}
+
+// Generate a mission. The endpoint STREAMS raw model text (so it never 504s);
+// we accumulate and parse it here.
 export async function generateMission(objective, model) {
   const res = await fetch('/api/flow', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ objective, model }),
   })
-  if (!res.ok) {
-    let msg = 'Could not generate the mission.'
-    try {
-      msg = (await res.json())?.error || msg
-    } catch {
-      /* ignore */
-    }
-    throw new Error(msg)
+  if (!res.ok || !res.body) {
+    throw new Error('Could not reach the planner. Please try again.')
   }
-  const data = await res.json()
-  return data.mission
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let full = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    full += decoder.decode(value, { stream: true })
+  }
+  if (full.includes('__NRVS_FLOW_ERROR__')) {
+    throw new Error('The planner ran into an error. Please try again.')
+  }
+  return parseMissionText(full, objective)
 }
 
 // Execute ONE plan item autonomously; returns the produced result text.
