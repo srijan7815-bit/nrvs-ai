@@ -7,12 +7,43 @@ import { saveToLibrary } from './library'
 import { haptic } from './haptics'
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// Polite gap between items to stay under the model's rate limit (long runs).
+const ITEM_DELAY_MS = 2500
 
 export function useFlowRunner(flowId, model) {
   const [running, setRunning] = useState(false)
   const [current, setCurrent] = useState(null) // {kind,title}
   const [error, setError] = useState('')
+  const [retrying, setRetrying] = useState(0)
   const cancelRef = useRef(false)
+
+  // Execute one item with resilient retry/backoff so a transient 429/5xx
+  // never kills a long autonomous run.
+  const execResilient = async (payload) => {
+    let attempt = 0
+    while (!cancelRef.current) {
+      try {
+        const out = await execItem(payload)
+        setRetrying(0)
+        return out
+      } catch (e) {
+        const msg = e?.message || ''
+        const transient = /429|too many|5\d\d|timeout|network|fetch/i.test(msg)
+        if (!transient || attempt >= 6) throw e
+        attempt++
+        setRetrying(attempt)
+        // exponential backoff up to ~30s, then steady — keeps trying for a long time
+        const wait = Math.min(4000 * Math.pow(1.7, attempt), 30000)
+        const steps = Math.ceil(wait / 500)
+        for (let s = 0; s < steps; s++) {
+          if (cancelRef.current) return ''
+          await sleep(500)
+        }
+      }
+    }
+    return ''
+  }
 
   const stop = useCallback(() => {
     cancelRef.current = true
@@ -44,7 +75,7 @@ export function useFlowRunner(flowId, model) {
         const r = research[i]
         if (r.result) continue
         setCurrent({ kind: 'research', title: r.topic })
-        const out = await execItem({
+        const out = await execResilient({
           objective,
           item: { kind: 'research', title: r.topic, context: r.note },
           mission: mission(),
@@ -55,6 +86,7 @@ export function useFlowRunner(flowId, model) {
           j === i ? { ...x, result: out, done: true } : x
         )
         updateFlowData(flowId, { ...m, research: next })
+        await sleep(ITEM_DELAY_MS)
       }
 
       // 2) Documents (write full content)
@@ -64,7 +96,7 @@ export function useFlowRunner(flowId, model) {
         const d = docs[i]
         if (d.content) continue
         setCurrent({ kind: 'document', title: d.name })
-        const out = await execItem({
+        const out = await execResilient({
           objective,
           item: { kind: 'document', title: d.name, context: d.purpose },
           mission: mission(),
@@ -85,6 +117,7 @@ export function useFlowRunner(flowId, model) {
         } catch {
           /* ignore */
         }
+        await sleep(ITEM_DELAY_MS)
       }
 
       // 3) Tasks (priority order, skip already done)
@@ -103,7 +136,7 @@ export function useFlowRunner(flowId, model) {
           ...mission(),
           tasks: mission().tasks.map((x, j) => (j === i ? { ...x, status: 'doing' } : x)),
         })
-        const out = await execItem({
+        const out = await execResilient({
           objective,
           item: { kind: 'task', title: t.title },
           mission: mission(),
@@ -116,6 +149,7 @@ export function useFlowRunner(flowId, model) {
             j === i ? { ...x, status: 'done', result: out } : x
           ),
         })
+        await sleep(ITEM_DELAY_MS)
       }
 
       updateFlowData(flowId, { ...mission(), status: 'done' })
@@ -135,5 +169,5 @@ export function useFlowRunner(flowId, model) {
     }
   }, [flowId, model])
 
-  return { run, stop, running, current, error }
+  return { run, stop, running, current, error, retrying }
 }

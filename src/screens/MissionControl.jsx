@@ -126,7 +126,7 @@ export default function MissionControl() {
   const navigate = useNavigate()
   const flow = useFlow(id)
   const [prefs] = usePrefs()
-  const { run, stop, running, current, error } = useFlowRunner(id, prefs.model)
+  const { run, stop, running, current, error, retrying } = useFlowRunner(id, prefs.model)
   const [confirm, confirmUI] = useConfirm()
   const [newTask, setNewTask] = useState('')
 
@@ -195,9 +195,12 @@ export default function MissionControl() {
           <div className="card mb-5 flex items-center gap-3 rounded-lg border-accent-blue/30 bg-accent-blue/5 p-4">
             <Loader2 size={18} className="animate-spin text-accent-blue" />
             <div className="min-w-0 flex-1">
-              <div className="text-body font-medium text-text-primary">NRVS is working…</div>
+              <div className="text-body font-medium text-text-primary">
+                {retrying > 0 ? 'Rate-limited — waiting & retrying…' : 'NRVS is working…'}
+              </div>
               <p className="truncate text-body-sm text-text-tertiary">
                 {current ? `${current.kind}: ${current.title}` : 'Starting…'}
+                {retrying > 0 ? `  (retry ${retrying})` : ''}
               </p>
             </div>
             <button onClick={stop} className="btn-icon flex h-9 items-center gap-1.5 px-3 text-body-sm">

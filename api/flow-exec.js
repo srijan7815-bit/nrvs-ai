@@ -106,22 +106,38 @@ export default async function handler(req, res) {
 }
 
 async function call(baseURL, apiKey, model, messages, { tools, maxTokens } = {}) {
-  const r = await fetch(`${baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.6,
-      max_tokens: maxTokens || 2048,
-      messages,
-      ...(tools ? { tools, tool_choice: 'auto' } : {}),
-    }),
+  const body = JSON.stringify({
+    model,
+    temperature: 0.6,
+    max_tokens: maxTokens || 2048,
+    messages,
+    ...(tools ? { tools, tool_choice: 'auto' } : {}),
   })
-  if (!r.ok) {
+  // Retry with exponential backoff on rate limits / transient errors.
+  let lastErr = ''
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const r = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body,
+    })
+    if (r.ok) return r.json()
+    const status = r.status
+    lastErr = `model ${status}`
+    // 429 (rate limit) or 5xx (transient) -> wait and retry
+    if (status === 429 || status >= 500) {
+      const retryAfter = parseFloat(r.headers.get('retry-after') || '0')
+      const wait = retryAfter
+        ? retryAfter * 1000
+        : Math.min(1500 * Math.pow(2, attempt), 12000)
+      await new Promise((res) => setTimeout(res, wait))
+      continue
+    }
+    // non-retryable
     const t = await r.text().catch(() => '')
-    throw new Error(`model ${r.status}: ${t.slice(0, 100)}`)
+    throw new Error(`model ${status}: ${t.slice(0, 100)}`)
   }
-  return r.json()
+  throw new Error(`${lastErr}: rate limited (retries exhausted)`)
 }
 
 function readJson(req) {
