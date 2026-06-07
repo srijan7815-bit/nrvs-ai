@@ -20,7 +20,7 @@ export function useFlowLauncher() {
       haptic('medium')
       try {
         const mission = await generateMission(objective.trim(), model)
-        const id = await createFlow(objective.trim(), mission)
+        const id = await createFlow(objective.trim(), { ...mission, status: 'review' })
         navigate(`/flow/${id}`)
       } catch (e) {
         setError(e.message || 'Could not start Flow State.')

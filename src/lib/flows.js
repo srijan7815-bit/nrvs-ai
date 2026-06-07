@@ -150,3 +150,23 @@ export async function generateMission(objective, model) {
   const data = await res.json()
   return data.mission
 }
+
+// Execute ONE plan item autonomously; returns the produced result text.
+export async function execItem({ objective, item, mission, model }) {
+  const res = await fetch('/api/flow-exec', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ objective, item, mission, model }),
+  })
+  if (!res.ok) {
+    let msg = 'Execution failed.'
+    try {
+      msg = (await res.json())?.error || msg
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg)
+  }
+  const data = await res.json()
+  return data.result || ''
+}
