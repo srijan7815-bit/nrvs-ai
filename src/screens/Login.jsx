@@ -84,7 +84,7 @@ export default function Login() {
           {!cloud && (
             <div className="mb-4 rounded-md border border-accent-orange/30 bg-accent-orange/10 px-3 py-2 text-body-sm text-accent-orange">
               Cloud auth isn’t configured yet. Add Supabase keys to enable Email
-              & Google login. You can still continue as a guest.
+              &amp; Google login.
             </div>
           )}
 
@@ -165,18 +165,17 @@ export default function Login() {
           )}
         </div>
 
-        {/* Guest mode */}
-        <div className="mt-5 text-center">
-          <a
-            href="/?guest=1"
-            className="text-body-sm text-text-tertiary transition-colors hover:text-text-secondary"
-          >
-            Continue as guest →
-          </a>
-        </div>
-
+        {/* Legal footer */}
         <p className="mt-8 text-center text-caption text-text-tertiary">
-          By continuing you agree to the NRVS Terms & Privacy Policy.
+          By continuing you agree to the{' '}
+          <a href="/terms" className="hover:text-text-secondary hover:underline">
+            Terms of Service
+          </a>{' '}
+          and{' '}
+          <a href="/privacy" className="hover:text-text-secondary hover:underline">
+            Privacy Policy
+          </a>
+          .
         </p>
       </div>
     </div>

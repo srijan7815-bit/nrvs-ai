@@ -21,6 +21,12 @@ export default function SidebarContent({ onNavigate }) {
   const initial = (name || user?.email || USER_INITIAL).charAt(0).toUpperCase()
   const [confirm, confirmUI] = useConfirm()
 
+  const legalLinks = [
+    { label: 'Privacy Policy', to: '/privacy' },
+    { label: 'Terms of Service', to: '/terms' },
+    { label: 'Cookie Policy', to: '/cookies' },
+  ]
+
   const askDelete = async (t) => {
     const ok = await confirm({
       title: 'Delete thread?',
@@ -119,6 +125,20 @@ export default function SidebarContent({ onNavigate }) {
             })}
           </div>
         )}
+      </div>
+
+      {/* Legal links */}
+      <div className="mt-3 flex items-center justify-center gap-3 px-3 border-t border-border pt-3">
+        {legalLinks.map((link, i) => (
+          <a
+            key={link.to}
+            href={link.to}
+            onClick={onNavigate}
+            className="text-caption text-text-tertiary transition-colors hover:text-text-secondary"
+          >
+            {link.label}
+          </a>
+        ))}
       </div>
 
       {/* Bottom: avatar (settings) + new thread */}

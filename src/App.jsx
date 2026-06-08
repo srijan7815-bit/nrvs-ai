@@ -15,6 +15,9 @@ import Secrets from './screens/Secrets'
 import ApiKeys from './screens/ApiKeys'
 import Flows from './screens/Flows'
 import MissionControl from './screens/MissionControl'
+import PrivacyPolicy from './screens/PrivacyPolicy'
+import TermsOfService from './screens/TermsOfService'
+import CookiePolicy from './screens/CookiePolicy'
 import { useAuth } from './lib/auth'
 import { initStoreForUser } from './lib/store'
 import { initMemoryForUser } from './lib/memory'
@@ -27,15 +30,6 @@ import { initApiKeysForUser } from './lib/apikeys'
 import { initFlowsForUser } from './lib/flows'
 import Onboarding from './components/Onboarding'
 
-/** Returns true if the visitor explicitly chose guest mode. */
-function isGuest() {
-  if (typeof window === 'undefined') return false
-  if (new URLSearchParams(window.location.search).get('guest') === '1') {
-    localStorage.setItem('nrvs.guest', '1')
-  }
-  return localStorage.getItem('nrvs.guest') === '1'
-}
-
 function FullScreenLoader() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg text-text-tertiary">
@@ -44,11 +38,11 @@ function FullScreenLoader() {
   )
 }
 
-/** Gate: requires auth (cloud) unless the user picked guest mode or cloud is disabled. */
+/** Gate: requires auth when cloud mode is enabled. */
 function Protected({ children }) {
   const { user, loading, cloud } = useAuth()
   if (loading) return <FullScreenLoader />
-  if (cloud && !user && !isGuest()) return <Navigate to="/login" replace />
+  if (cloud && !user) return <Navigate to="/login" replace />
   return children
 }
 
@@ -56,7 +50,7 @@ export default function App() {
   const { user, loading, cloud } = useAuth()
   const location = useLocation()
 
-  // Keep the data store in sync with the signed-in user (or guest/local).
+  // Keep the data store in sync with the signed-in user.
   useEffect(() => {
     if (loading) return
     const id = cloud ? user?.id ?? null : null
@@ -73,11 +67,17 @@ export default function App() {
 
   return (
     <>
-    {/* Ask logged-in users without a name to set one (Google users skip this). */}
+    {/* Ask logged-in users who haven't onboarded yet to set a name and consent. */}
     {!loading && cloud && user && <Onboarding />}
     <Routes>
       {/* Public, no-auth shared chat view */}
       <Route path="/share/:id" element={<SharedChat />} />
+
+      {/* Legal pages — public */}
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/cookies" element={<CookiePolicy />} />
+
       <Route
         path="/login"
         element={

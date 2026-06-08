@@ -1,17 +1,19 @@
 import { useState } from 'react'
 import { ArrowRight, ShieldCheck, KeyRound, Check, ExternalLink, SkipForward } from 'lucide-react'
 import Wordmark from './Wordmark'
-import { useProfile, saveName, setConsent } from '../lib/profile'
+import { useProfile, saveName, setConsent, setOnboarded } from '../lib/profile'
 import { PROVIDERS } from '../lib/providers'
 import { addSecret, useSecrets } from '../lib/secrets'
 import { haptic } from '../lib/haptics'
 
 /**
- * First-run onboarding: 1) name  2) consent  3) BYOK key setup.
- * Shown to logged-in users who haven't completed it. Skippable at the keys step.
+ * First-run onboarding: 1) name (if needed)  2) consent  3) BYOK key setup.
+ * Shown to logged-in users who haven't completed it.
+ * Google users with a display_name already set skip the name step.
+ * Existing users (onboarded: true) see nothing.
  */
 export default function Onboarding() {
-  const { name, consent, ready } = useProfile()
+  const { name, consent, onboarded, ready } = useProfile()
   const secrets = useSecrets()
   const [step, setStep] = useState(0)
   const [value, setValue] = useState('')
@@ -19,8 +21,13 @@ export default function Onboarding() {
   const [saving, setSaving] = useState(false)
 
   if (!ready) return null
-  // Show until name AND consent are set.
-  if (name && consent) return null
+
+  // Already completed onboarding — show nothing.
+  if (onboarded) return null
+
+  // Determine the first step to show.
+  // Step 0 = name (only if name is null), step 1 = consent, step 2 = keys.
+  const initialStep = name ? 1 : 0
 
   const submitName = async (e) => {
     e.preventDefault()
@@ -31,9 +38,11 @@ export default function Onboarding() {
     setStep(1)
   }
 
-  const acceptConsent = () => {
+  const acceptConsent = async () => {
     haptic('success')
     setConsent(true)
+    // Mark as onboarded so we never show this again.
+    await setOnboarded(true)
     setStep(2)
   }
 
@@ -50,9 +59,10 @@ export default function Onboarding() {
 
   const finish = () => {
     haptic('medium')
-    // consent already set => component unmounts
-    if (!consent) setConsent(true)
+    // consent already set above; onboarded already saved above
   }
+
+  const currentStep = step === 0 ? initialStep : step
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-bg/97 px-5 py-8 backdrop-blur-sm">
@@ -61,8 +71,8 @@ export default function Onboarding() {
           <Wordmark className="text-3xl" />
         </div>
 
-        {/* Step 0: name */}
-        {step === 0 && (
+        {/* Step 0: name — only shown when name is null (non-Google users) */}
+        {currentStep === 0 && (
           <form onSubmit={submitName} className="card rounded-lg p-6 text-center">
             <h1 className="text-heading-md font-semibold">Welcome to NRVS</h1>
             <p className="mt-1 mb-4 text-body text-text-secondary">
@@ -86,7 +96,7 @@ export default function Onboarding() {
         )}
 
         {/* Step 1: consent */}
-        {step === 1 && (
+        {currentStep === 1 && (
           <div className="card rounded-lg p-6">
             <div className="mb-3 flex items-center gap-2">
               <ShieldCheck size={20} className="text-accent-blue" />
@@ -118,7 +128,7 @@ export default function Onboarding() {
         )}
 
         {/* Step 2: BYOK keys */}
-        {step === 2 && (
+        {currentStep === 2 && (
           <div className="card rounded-lg p-6">
             <div className="mb-1 flex items-center gap-2">
               <KeyRound size={20} className="text-accent-orange" />
@@ -126,7 +136,7 @@ export default function Onboarding() {
             </div>
             <p className="mb-4 text-body-sm text-text-tertiary">
               Bring your own keys so NRVS runs on your accounts. Optional — you can
-              add these later in Settings → Secrets. They’re stored securely and
+              add these later in Settings → Secrets. They&apos;re stored securely and
               revocable anytime.
             </p>
 

@@ -23,7 +23,7 @@ import Toggle from '../components/Toggle'
 import Layout from '../components/Layout'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { usePrefs } from '../lib/prefs'
-import { clearLocal } from '../lib/store'
+
 import { useAuth } from '../lib/auth'
 import { useProfile, saveName } from '../lib/profile'
 import { FONT_OPTIONS } from '../lib/fonts'
@@ -74,7 +74,7 @@ export default function Settings() {
   const { name } = useProfile()
   const servers = useMcpServers()
 
-  const email = user?.email || 'guest@nrvs.local'
+  const email = user?.email || ''
 
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(name || '')
@@ -84,17 +84,7 @@ export default function Settings() {
 
   const doLogout = async () => {
     haptic('warning')
-    if (cloud) {
-      await signOut()
-    } else {
-      clearLocal()
-      try {
-        localStorage.removeItem('nrvs.guest')
-        localStorage.removeItem('nrvs.prefs.v1')
-      } catch {
-        /* ignore */
-      }
-    }
+    await signOut()
     setConfirmLogout(false)
     navigate('/login')
   }
@@ -136,7 +126,7 @@ export default function Settings() {
             <div className="truncate text-body-sm text-text-tertiary">{email}</div>
           </div>
           <span className="ml-2 shrink-0 rounded-pill border border-border px-3 py-1 text-body-sm text-text-secondary">
-            {cloud ? 'Account' : 'Guest'}
+            Account
           </span>
         </div>
 
@@ -333,7 +323,7 @@ export default function Settings() {
         <div className="mt-6">
           <Row
             icon={LogOut}
-            label={cloud ? 'Log out' : 'Exit guest mode'}
+            label="Log out"
             danger
             right={<span />}
             onClick={() => setConfirmLogout(true)}
@@ -343,13 +333,9 @@ export default function Settings() {
 
       <ConfirmDialog
         open={confirmLogout}
-        title={cloud ? 'Log out?' : 'Exit guest mode?'}
-        message={
-          cloud
-            ? 'You’ll need to sign in again to access your NRVS on this device.'
-            : 'Your local threads on this device will be cleared.'
-        }
-        confirmLabel={cloud ? 'Log out' : 'Exit'}
+        title="Log out?"
+        message="You’ll need to sign in again to access your NRVS on this device."
+        confirmLabel="Log out"
         danger
         onConfirm={doLogout}
         onCancel={() => setConfirmLogout(false)}
