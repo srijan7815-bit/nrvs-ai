@@ -187,7 +187,7 @@ export default function Message({
                     className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
                     title="Edit & resend"
                   >
-                    <Pencil size={13} /> Edit
+                    <Pencil size={13} />
                   </button>
                 )}
                 <button
