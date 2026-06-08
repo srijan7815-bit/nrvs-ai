@@ -19,21 +19,75 @@ function subscribe(cb) {
   return () => listeners.delete(cb)
 }
 
-export async function initProfile(user) {
+function persistName(name) {
+  try {
+    localStorage.setItem(LS_NAME, name)
+  } catch {
+    /* ignore */
+  }
+  if (userId && isCloudEnabled) {
+    // Fire-and-forget DB save — don't block the UI.
+    supabase
+      .from('profiles')
+      .upsert({ id: userId, display_name: name }, { onConflict: 'id' })
+      .then(({ error }) => {
+        if (error) console.warn('[NRVS] Failed to save display_name:', error.message)
+      })
+  }
+}
+
+function persistOnboarded(v) {
+  try {
+    localStorage.setItem(LS_ONBOARDED, v ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+  if (userId && isCloudEnabled) {
+    supabase
+      .from('profiles')
+      .upsert({ id: userId, onboarded: !!v }, { onConflict: 'id' })
+      .then(({ error }) => {
+        if (error) console.warn('[NRVS] Failed to save onboarded:', error.message)
+      })
+  }
+}
+
+/**
+ * Initialize profile for the given user.
+ *
+ * IMPORTANT: This is split into a SYNCHRONOUS pass and an ASYNC pass.
+ *
+ * SYNC — runs immediately so the UI gets the correct `name` / `onboarded`
+ * values before `ready` is set to `true`.  This prevents the Onboarding
+ * overlay from rendering with stale (null) data.
+ *
+ * ASYNC — fetches cloud data in the background and fires a second `emit()`
+ * if the cloud state differs from what we already set.
+ */
+export function initProfile(user) {
   userId = user?.id || null
 
-  // Google / OAuth name from auth metadata
+  // ── Determine starting values from all available sources ──
+  const localName = (() => {
+    try { return localStorage.getItem(LS_NAME) || null } catch { return null }
+  })()
+  const localConsent = (() => {
+    try { return localStorage.getItem(LS_CONSENT) === '1' } catch { return false }
+  })()
+  const localOnboarded = (() => {
+    try { return localStorage.getItem(LS_ONBOARDED) === '1' } catch { return false }
+  })()
+
+  // Google / OAuth name is available synchronously from the auth session.
   const metaName =
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     null
 
-  const localConsent = localStorage.getItem(LS_CONSENT) === '1'
-  const localOnboarded = localStorage.getItem(LS_ONBOARDED) === '1'
-
+  // ── LOCAL / NO-CLOUD path ──
   if (!userId || !isCloudEnabled) {
     state = {
-      name: localStorage.getItem(LS_NAME) || metaName || null,
+      name: localName || metaName || null,
       consent: localConsent,
       onboarded: localOnboarded,
       ready: true,
@@ -42,34 +96,56 @@ export async function initProfile(user) {
     return
   }
 
-  // Cloud: load profile from Supabase (fall back gracefully if table/column missing)
-  let profileName = null
-  let onboardedFromCloud = false
-  try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('display_name, onboarded')
-      .eq('id', userId)
-      .maybeSingle()
-    profileName = data?.display_name || null
-    onboardedFromCloud = !!data?.onboarded
-  } catch {
-    /* table or column may not exist yet */
-  }
+  // ── CLOUD path: set synchronous values FIRST (before DB fetch) ──
+  // Priority: Google metadata > localStorage > null
+  const resolvedName = metaName || localName || null
 
-  // If no stored name but Google gave one, save it
-  if (!profileName && metaName) {
-    profileName = metaName
-    saveName(metaName)
-  }
-
+  // For brand-new users the DB fetch will return null (no row yet).
+  // We never treat "no DB row yet" as `onboarded = true`.
+  // Only an explicit `true` from the DB marks them as having completed.
   state = {
-    name: profileName || localStorage.getItem(LS_NAME) || null,
+    name: resolvedName,
     consent: localConsent,
-    onboarded: onboardedFromCloud || localOnboarded,
-    ready: true,
+    onboarded: false, // DB fetch is the authoritative source
+    ready: true,      // UI gets a useful default immediately
   }
   emit()
+
+  // Save Google name to DB if we have one and it's not already stored.
+  if (resolvedName && resolvedName !== localName) {
+    persistName(resolvedName)
+  }
+
+  // ── ASYNC: fetch cloud profile, reconcile if needed ──
+  supabase
+    .from('profiles')
+    .select('display_name, onboarded')
+    .eq('id', userId)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (error) return // table/column may not exist yet — ignore
+
+      const cloudName = data?.display_name || null
+      const cloudOnboarded = !!data?.onboarded
+
+      // Reconcile: use cloud name if better than what we already have.
+      // (Cloud name is authoritative for signed-in users.)
+      const bestName = cloudName || resolvedName || null
+
+      // Only update if cloud state differs from what we set synchronously.
+      if (
+        state.name !== bestName ||
+        state.onboarded !== cloudOnboarded
+      ) {
+        state = {
+          name: bestName,
+          consent: state.consent,
+          onboarded: cloudOnboarded,
+          ready: true,
+        }
+        emit()
+      }
+    })
 }
 
 export function setConsent(v) {
@@ -82,44 +158,18 @@ export function setConsent(v) {
   }
 }
 
-export async function setOnboarded(v) {
+export function setOnboarded(v) {
   state = { ...state, onboarded: !!v }
   emit()
-  try {
-    localStorage.setItem(LS_ONBOARDED, v ? '1' : '0')
-  } catch {
-    /* ignore */
-  }
-  if (userId && isCloudEnabled) {
-    try {
-      await supabase
-        .from('profiles')
-        .upsert({ id: userId, onboarded: true }, { onConflict: 'id' })
-    } catch {
-      /* ignore */
-    }
-  }
+  persistOnboarded(!!v)
 }
 
-export async function saveName(name) {
+export function saveName(name) {
   const clean = (name || '').trim()
   if (!clean) return
   state = { ...state, name: clean }
   emit()
-  try {
-    localStorage.setItem(LS_NAME, clean)
-  } catch {
-    /* ignore */
-  }
-  if (userId && isCloudEnabled) {
-    try {
-      await supabase
-        .from('profiles')
-        .upsert({ id: userId, display_name: clean }, { onConflict: 'id' })
-    } catch {
-      /* ignore */
-    }
-  }
+  persistName(clean)
 }
 
 export function getProfile() {
