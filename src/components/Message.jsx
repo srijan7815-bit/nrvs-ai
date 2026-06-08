@@ -36,7 +36,6 @@ export default function Message({
   const [draft, setDraft] = useState(content)
   const { openArtifact } = useArtifacts()
 
-  // Detect a previewable web artifact in assistant messages.
   const blocks = !isUser ? parseCodeBlocks(content) : []
   const hasPreviewable = blocks.some((b) =>
     ['html', 'htm', 'css', 'js', 'javascript', 'svg'].includes(
@@ -113,17 +112,20 @@ export default function Message({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-      className={`flex w-full gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+      className={`flex w-full items-end gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
+      {/* Assistant avatar */}
       {!isUser && (
-        <div className="mt-0.5 flex h-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface px-2.5">
+        <div className="mb-0.5 flex h-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface px-2.5">
           <Mark size={30} />
         </div>
       )}
 
-      <div className={isUser ? 'max-w-[80%]' : 'max-w-[85%] pt-1'}>
-        {isUser ? (
-          <>
+      {/* User content: bubble + actions wrapped in one column so actions don't affect bubble width */}
+      {isUser && (
+        <div className="max-w-[80%]">
+          {/* Bubble */}
+          <div className="w-fit">
             {editing ? (
               <div className="rounded-lg border border-border bg-surface2 p-2">
                 <textarea
@@ -167,150 +169,152 @@ export default function Message({
                 {content && <span className="whitespace-pre-wrap">{content}</span>}
               </div>
             )}
-          </>
-        ) : (
-          <>
-            {model && (
-              <div className="mb-1 text-caption text-text-tertiary">
-                {modelLabel(model)}
-              </div>
-            )}
-            <ToolChips tools={tools} />
-            <Markdown text={content} />
-            {streaming && (
-              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-text-tertiary align-middle" />
-            )}
+          </div>
 
-            {!streaming && content && !shared && (
-              <div className="mt-2 flex items-center gap-1">
+          {/* Actions — inside the column, full-width, right-aligned */}
+          {!shared && !editing && (
+            <div className="mt-1 flex justify-end gap-1">
+              <button
+                onClick={onCopy}
+                className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                title="Copy"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+              </button>
+              {onEdit && (
                 <button
-                  onClick={onCopy}
-                  className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-                  title="Copy"
+                  onClick={() => {
+                    setDraft(content)
+                    setEditing(true)
+                  }}
+                  className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                  title="Edit &amp; resend"
                 >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  <Pencil size={13} />
                 </button>
-                {ttsSupported() && (
-                  <button
-                    onClick={onSpeak}
-                    className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
-                      speaking
-                        ? 'text-accent-blue'
-                        : 'text-text-tertiary hover:text-text-primary'
-                    }`}
-                    title="Read aloud"
-                  >
-                    {speaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                  </button>
-                )}
+              )}
+              <button
+                onClick={onRemember}
+                className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
+                  remembered
+                    ? 'text-accent-blue'
+                    : 'text-text-tertiary hover:text-text-primary'
+                }`}
+                title="Ask NRVS to remember this"
+              >
+                {remembered ? <Check size={13} /> : <Brain size={13} />}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assistant content */}
+      {!isUser && (
+        <div className="max-w-[85%] pt-1">
+          {model && (
+            <div className="mb-1 text-caption text-text-tertiary">
+              {modelLabel(model)}
+            </div>
+          )}
+          <ToolChips tools={tools} />
+          <Markdown text={content} />
+          {streaming && (
+            <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-text-tertiary align-middle" />
+          )}
+
+          {!streaming && content && !shared && (
+            <div className="mt-2 flex items-center gap-1">
+              <button
+                onClick={onCopy}
+                className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                title="Copy"
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+              {ttsSupported() && (
                 <button
-                  onClick={onRemember}
+                  onClick={onSpeak}
                   className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
-                    remembered
+                    speaking
                       ? 'text-accent-blue'
                       : 'text-text-tertiary hover:text-text-primary'
                   }`}
-                  title="Remember this"
+                  title="Read aloud"
                 >
-                  {remembered ? <Check size={14} /> : <Brain size={14} />}
+                  {speaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
                 </button>
-                {onRetry && (
-                  <button
-                    onClick={onRetry}
-                    className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-                    title="Retry / regenerate"
-                  >
-                    <RefreshCw size={14} />
-                  </button>
-                )}
-              </div>
-            )}
+              )}
+              <button
+                onClick={onRemember}
+                className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
+                  remembered
+                    ? 'text-accent-blue'
+                    : 'text-text-tertiary hover:text-text-primary'
+                }`}
+                title="Remember this"
+              >
+                {remembered ? <Check size={14} /> : <Brain size={14} />}
+              </button>
+              {onRetry && (
+                <button
+                  onClick={onRetry}
+                  className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+                  title="Retry / regenerate"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              )}
+            </div>
+          )}
 
-            {/* Artifact footer: open preview + save to library */}
-            {!streaming && hasPreviewable && !shared && (
-              <div className="mt-2 overflow-hidden rounded-md border border-border bg-surface2">
-                <button
-                  onClick={onOpenArtifact}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-border"
-                >
-                  <AppWindow size={16} className="text-accent-orange" />
-                  <span className="flex-1 text-body-sm text-text-primary">
-                    Open compiled preview
-                  </span>
-                  <span className="text-caption text-text-tertiary">
-                    {fileCount > 1 ? `${blocks.length} files →` : 'Artifact →'}
-                  </span>
-                </button>
-                <button
-                  onClick={onSaveLibrary}
-                  className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left transition-colors hover:bg-border"
-                >
-                  {saved ? (
-                    <Check size={16} className="text-accent-blue" />
-                  ) : (
-                    <BookmarkPlus size={16} className="text-text-secondary" />
-                  )}
-                  <span className="flex-1 text-body-sm text-text-primary">
-                    {saved ? 'Saved to Library' : 'Save to Library'}
-                  </span>
-                </button>
-              </div>
-            )}
-            {/* shared view: read-only open preview */}
-            {!streaming && hasPreviewable && shared && (
+          {/* Artifact footer */}
+          {!streaming && hasPreviewable && !shared && (
+            <div className="mt-2 overflow-hidden rounded-md border border-border bg-surface2">
               <button
                 onClick={onOpenArtifact}
-                className="mt-2 flex w-full items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2.5 text-left transition-colors hover:bg-border"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-border"
               >
                 <AppWindow size={16} className="text-accent-orange" />
                 <span className="flex-1 text-body-sm text-text-primary">
                   Open compiled preview
                 </span>
+                <span className="text-caption text-text-tertiary">
+                  {fileCount > 1 ? `${blocks.length} files →` : 'Artifact →'}
+                </span>
               </button>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* User message actions — rendered OUTSIDE the bubble column so
-          bubble width is determined only by text length, not icon row width. */}
-      {isUser && content && !shared && !editing && (
-        <div className="flex items-end gap-1.5 pb-0.5 pl-3">
-          <button
-            onClick={onCopy}
-            className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-            title="Copy"
-          >
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-          </button>
-          {onEdit && (
+              <button
+                onClick={onSaveLibrary}
+                className="flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left transition-colors hover:bg-border"
+              >
+                {saved ? (
+                  <Check size={16} className="text-accent-blue" />
+                ) : (
+                  <BookmarkPlus size={16} className="text-text-secondary" />
+                )}
+                <span className="flex-1 text-body-sm text-text-primary">
+                  {saved ? 'Saved to Library' : 'Save to Library'}
+                </span>
+              </button>
+            </div>
+          )}
+          {!streaming && hasPreviewable && shared && (
             <button
-              onClick={() => {
-                setDraft(content)
-                setEditing(true)
-              }}
-              className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-              title="Edit &amp; resend"
+              onClick={onOpenArtifact}
+              className="mt-2 flex w-full items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2.5 text-left transition-colors hover:bg-border"
             >
-              <Pencil size={13} />
+              <AppWindow size={16} className="text-accent-orange" />
+              <span className="flex-1 text-body-sm text-text-primary">
+                Open compiled preview
+              </span>
             </button>
           )}
-          <button
-            onClick={onRemember}
-            className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
-              remembered
-                ? 'text-accent-blue'
-                : 'text-text-tertiary hover:text-text-primary'
-            }`}
-            title="Ask NRVS to remember this"
-          >
-            {remembered ? <Check size={13} /> : <Brain size={13} />}
-          </button>
         </div>
       )}
 
+      {/* User avatar */}
       {isUser && (
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-surface2 text-body-sm font-medium text-text-primary ring-1 ring-border">
+        <div className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-surface2 text-body-sm font-medium text-text-primary ring-1 ring-border">
           {userInitial}
         </div>
       )}
