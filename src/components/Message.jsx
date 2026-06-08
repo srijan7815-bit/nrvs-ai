@@ -167,42 +167,6 @@ export default function Message({
                 {content && <span className="whitespace-pre-wrap">{content}</span>}
               </div>
             )}
-
-            {/* User message actions */}
-            {content && !shared && !editing && (
-              <div className="mt-1 flex justify-end gap-1">
-                <button
-                  onClick={onCopy}
-                  className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-                  title="Copy"
-                >
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
-                </button>
-                {onEdit && (
-                  <button
-                    onClick={() => {
-                      setDraft(content)
-                      setEditing(true)
-                    }}
-                    className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
-                    title="Edit & resend"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                )}
-                <button
-                  onClick={onRemember}
-                  className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
-                    remembered
-                      ? 'text-accent-blue'
-                      : 'text-text-tertiary hover:text-text-primary'
-                  }`}
-                  title="Ask NRVS to remember this"
-                >
-                  {remembered ? <Check size={13} /> : <Brain size={13} />}
-                </button>
-              </div>
-            )}
           </>
         ) : (
           <>
@@ -307,6 +271,43 @@ export default function Message({
           </>
         )}
       </div>
+
+      {/* User message actions — rendered OUTSIDE the bubble column so
+          bubble width is determined only by text length, not icon row width. */}
+      {isUser && content && !shared && !editing && (
+        <div className="flex items-end gap-1.5 pb-0.5 pl-3">
+          <button
+            onClick={onCopy}
+            className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+            title="Copy"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+          </button>
+          {onEdit && (
+            <button
+              onClick={() => {
+                setDraft(content)
+                setEditing(true)
+              }}
+              className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
+              title="Edit &amp; resend"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          <button
+            onClick={onRemember}
+            className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
+              remembered
+                ? 'text-accent-blue'
+                : 'text-text-tertiary hover:text-text-primary'
+            }`}
+            title="Ask NRVS to remember this"
+          >
+            {remembered ? <Check size={13} /> : <Brain size={13} />}
+          </button>
+        </div>
+      )}
 
       {isUser && (
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-surface2 text-body-sm font-medium text-text-primary ring-1 ring-border">
