@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Volume2, VolumeX, Copy, Check, Brain, AppWindow, BookmarkPlus, Pencil, RefreshCw, X } from 'lucide-react'
 import Markdown from '../lib/markdown.jsx'
@@ -12,7 +12,6 @@ import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts
 import { saveToLibrary } from '../lib/library'
 import { haptic } from '../lib/haptics'
 import { useProfile } from '../lib/profile'
-import MemoryPopup from './MemoryPopup'
 
 export default function Message({
   role,
@@ -36,10 +35,6 @@ export default function Message({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(content)
   const { openArtifact } = useArtifacts()
-
-  // Memory popup states — one per role so they don't interfere.
-  const [userMemoryOpen, setUserMemoryOpen] = useState(false)
-  const [assistMemoryOpen, setAssistMemoryOpen] = useState(false)
 
   const blocks = !isUser ? parseCodeBlocks(content) : []
   const hasPreviewable = blocks.some((b) =>
@@ -74,12 +69,8 @@ export default function Message({
     }
   }
 
-  // Manual memory: open the input popup instead of auto-adding.
-  const openUserMemory = () => setUserMemoryOpen(true)
-  const openAssistMemory = () => setAssistMemoryOpen(true)
-
-  const handleMemorySuccess = (setter) => () => {
-    setter(false)
+  const onRemember = async () => {
+    await addMemory(content, 'manual')
     setRemembered(true)
     setTimeout(() => setRemembered(false), 1800)
   }
@@ -130,9 +121,9 @@ export default function Message({
         </div>
       )}
 
-      {/* User content: bubble + actions wrapped in one column */}
+      {/* User content: bubble + actions wrapped in one column so actions don't affect bubble width */}
       {isUser && (
-        <div className="relative max-w-[80%]">
+        <div className="max-w-[80%]">
           {/* Bubble */}
           <div className="w-fit">
             {editing ? (
@@ -182,7 +173,7 @@ export default function Message({
 
           {/* Actions — inside the column, full-width, right-aligned */}
           {!shared && !editing && (
-            <div className="mt-1 flex items-center justify-end gap-1">
+            <div className="mt-1 flex justify-end gap-1">
               <button
                 onClick={onCopy}
                 className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
@@ -203,29 +194,18 @@ export default function Message({
                 </button>
               )}
               <button
-                ref={memoryBtnRef}
-                onClick={openUserMemory}
+                onClick={onRemember}
                 className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
                   remembered
                     ? 'text-accent-blue'
                     : 'text-text-tertiary hover:text-text-primary'
                 }`}
-                title="Remember this"
+                title="Ask NRVS to remember this"
               >
                 {remembered ? <Check size={13} /> : <Brain size={13} />}
               </button>
             </div>
           )}
-
-          {/* Memory popup — absolutely positioned below the actions row */}
-          <div className="absolute left-0 top-full mt-1 flex justify-end">
-            <MemoryPopup
-              open={userMemoryOpen}
-              prefill={content || ''}
-              onClose={() => setUserMemoryOpen(false)}
-              onSuccess={handleMemorySuccess(setUserMemoryOpen)}
-            />
-          </div>
         </div>
       )}
 
@@ -266,7 +246,7 @@ export default function Message({
                 </button>
               )}
               <button
-                onClick={openAssistMemory}
+                onClick={onRemember}
                 className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
                   remembered
                     ? 'text-accent-blue'
@@ -285,20 +265,6 @@ export default function Message({
                   <RefreshCw size={14} />
                 </button>
               )}
-            </div>
-          )}
-
-          {/* Assistant memory popup */}
-          {!streaming && !shared && (
-            <div className="relative">
-              <div className="absolute left-0 top-2">
-                <MemoryPopup
-                  open={assistMemoryOpen}
-                  prefill={content || ''}
-                  onClose={() => setAssistMemoryOpen(false)}
-                  onSuccess={handleMemorySuccess(setAssistMemoryOpen)}
-                />
-              </div>
             </div>
           )}
 
