@@ -1,7 +1,10 @@
 // POST /api/flow  { objective, model? }  ->  structured mission JSON
 // Flow State Mode: turns an objective into a full "mission control" workspace.
+// REQUIRES authentication — requests without a valid session are rejected.
 
 export const config = { maxDuration: 60 }
+
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
@@ -28,16 +31,19 @@ Rules:
 - Output ONLY the compact JSON object, no extra whitespace, no markdown.`
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
+  // ── SECURITY: Require valid session ──
+  try {
+    await requireAuth(req)
+  } catch (err) {
+    sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
     return
   }
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    res.status(503).json({ error: 'Model backend not configured.' })
+    sendError(res, 503, 'Model backend not configured.')
     return
   }
-  const body = await readJson(req)
+  const body = await parseBody(req)
   const objective = (body?.objective || '').trim()
   if (!objective) {
     res.status(400).json({ error: 'objective is required' })

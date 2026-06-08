@@ -4,6 +4,7 @@
 // returns the produced result text. Used by Flow State autonomous execution.
 
 import { webSearch, runCode, fileExplorer, TOOL_DEFINITIONS } from './_tools.js'
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
 
 export const config = { maxDuration: 60 }
 
@@ -26,6 +27,8 @@ function sys(objective, mission) {
 }
 
 export default async function handler(req, res) {
+  try { await requireAuth(req) }
+  catch (err) { sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

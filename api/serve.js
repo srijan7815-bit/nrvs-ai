@@ -3,11 +3,15 @@
 // starts the detected server (Node/Python/static), and returns a public URL.
 // The sandbox auto-expires after a few minutes.
 
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+
 export const config = { maxDuration: 60 }
 
 const PORT = 3000
 
 export default async function handler(req, res) {
+  try { await requireAuth(req) }
+  catch (err) { sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
@@ -18,7 +22,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const body = await readJson(req)
+  const body = await parseBody(req)
   const files = Array.isArray(body?.files) ? body.files : []
   if (!files.length) {
     res.status(400).json({ error: 'files[] is required' })

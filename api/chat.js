@@ -1,10 +1,10 @@
 // Vercel Serverless Function (Node runtime): POST /api/chat
+// REQUIRES authentication — requests without a valid session are rejected.
 //
 // Streams an assistant reply with tool-calling support:
 //   - web_search (Tavily)
 //   - run_code   (E2B sandbox)
 // Injects user "memories" into the system prompt.
-// Falls back to a simulated assistant if OPENAI_API_KEY is not set.
 //
 // Body: { messages, model?, image?, memories?: string[], tools?: boolean }
 // Streams plain text; tool activity is sent as lines prefixed with the
@@ -12,6 +12,7 @@
 
 import { webSearch, runCode, fileExplorer, TOOL_DEFINITIONS } from './_tools.js'
 import { ORIGIN_STORY, shouldAnswerOrigin } from './_origin.js'
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
 
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
@@ -49,6 +50,14 @@ function systemPrompt(memories, mcpServers) {
 }
 
 export default async function handler(req, res) {
+  // ── SECURITY: Require valid session ──
+  try {
+    await requireAuth(req)
+  } catch (err) {
+    sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
+    return
+  }
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

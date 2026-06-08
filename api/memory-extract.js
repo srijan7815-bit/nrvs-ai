@@ -3,6 +3,8 @@
 // Returns [] when nothing notable. Uses a fast model + strict JSON instruction.
 
 
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const EXTRACT_MODEL = 'meta/llama-3.1-8b-instruct'
 
@@ -30,6 +32,8 @@ Return STRICT JSON only: {"facts": ["..."]}. Empty when nothing qualifies: {"fac
 Each fact: short (max ~10 words), third person, about the user ("User is a doctor.", "User prefers concise answers.").`
 
 export default async function handler(req, res) {
+  try { await requireAuth(req) }
+  catch (err) { sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

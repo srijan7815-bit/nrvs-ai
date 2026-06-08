@@ -1,9 +1,12 @@
 // POST /api/run  { code, language }  -> { stdout, stderr, result } | { error }
 // Executes a code block in an E2B sandbox (used by the "Run" button on code blocks).
 import { runCode } from './_tools.js'
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
 
 
 export default async function handler(req, res) {
+  try { await requireAuth(req) }
+  catch (err) { sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

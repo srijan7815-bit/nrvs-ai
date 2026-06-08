@@ -4,6 +4,8 @@
 // back to NRVS's own rich native generation.
 // Streams plain text so it never times out; ends with the generated site code.
 
+import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+
 export const config = { maxDuration: 60 }
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
@@ -12,6 +14,8 @@ const FUISHAN = 'https://fuishan.vercel.app/api/generate'
 const FUISHAN_MODEL = 'google/gemma-4-31b-it'
 
 export default async function handler(req, res) {
+  try { await requireAuth(req) }
+  catch (err) { sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

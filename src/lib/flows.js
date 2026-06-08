@@ -3,6 +3,12 @@
 import { useSyncExternalStore } from 'react'
 import { supabase, isCloudEnabled } from './supabase'
 
+async function authHeaders() {
+  const { data } = await supabase?.auth.getSession()
+  const token = data?.session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 const LS_KEY = 'nrvs.flows.v1'
 
 function uid() {
@@ -160,9 +166,10 @@ function parseMissionText(text, objective) {
 // Generate a mission. The endpoint STREAMS raw model text (so it never 504s);
 // we accumulate and parse it here.
 export async function generateMission(objective, model) {
+  const auth = await authHeaders()
   const res = await fetch('/api/flow', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...auth },
     body: JSON.stringify({ objective, model }),
   })
   if (!res.ok || !res.body) {
@@ -184,9 +191,10 @@ export async function generateMission(objective, model) {
 
 // Execute ONE plan item autonomously; returns the produced result text.
 export async function execItem({ objective, item, mission, model }) {
+  const auth = await authHeaders()
   const res = await fetch('/api/flow-exec', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...auth },
     body: JSON.stringify({ objective, item, mission, model }),
   })
   if (!res.ok) {
