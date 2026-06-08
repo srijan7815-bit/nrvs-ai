@@ -2,9 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Volume2, VolumeX, Copy, Check, Brain, AppWindow, BookmarkPlus, Pencil, RefreshCw, X } from 'lucide-react'
 import Markdown from '../lib/markdown.jsx'
-import Mark from './Mark'
 import ToolChips from './ToolChips'
-import { USER_INITIAL } from './nav'
 import { modelLabel } from '../lib/models'
 import { speak, stopSpeaking, ttsSupported } from '../lib/speech'
 import { addMemory } from '../lib/memory'
@@ -27,7 +25,6 @@ export default function Message({
 }) {
   const isUser = role === 'user'
   const { name } = useProfile()
-  const userInitial = (name || USER_INITIAL).charAt(0).toUpperCase()
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [remembered, setRemembered] = useState(false)
@@ -114,14 +111,7 @@ export default function Message({
       transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
       className={`flex w-full items-end gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
-      {/* Assistant avatar */}
-      {!isUser && (
-        <div className="mb-0.5 flex h-8 shrink-0 items-center justify-center rounded-pill border border-border bg-surface px-2.5">
-          <Mark size={30} />
-        </div>
-      )}
-
-      {/* User content: bubble + actions wrapped in one column so actions don't affect bubble width */}
+      {/* Assistant content: bubble + actions wrapped in one column so actions don't affect bubble width */}
       {isUser && (
         <div className="max-w-[80%]">
           {/* Bubble */}
@@ -312,12 +302,6 @@ export default function Message({
         </div>
       )}
 
-      {/* User avatar */}
-      {isUser && (
-        <div className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-pill bg-surface2 text-body-sm font-medium text-text-primary ring-1 ring-border">
-          {userInitial}
-        </div>
-      )}
     </motion.div>
   )
 }
