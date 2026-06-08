@@ -8,15 +8,20 @@ import { haptic } from '../lib/haptics'
 
 /**
  * First-run onboarding: 1) name (if needed)  2) consent  3) BYOK key setup.
- * Shown to logged-in users who haven't completed it.
- * Google users with a display_name already set skip the name step.
- * Existing users (onboarded: true) see nothing.
+ *
+ * Show to logged-in users who haven't completed it.
+ * - No stored name (email-only sign-up): show blank name form → consent → keys
+ * - Google name available: show name form pre-filled → consent → keys
+ * - Google name + onboarded = true: show nothing
+ * - Email-only + localOnboarded = true: show nothing
+ *
+ * The key invariant: if onboarded is true, nothing renders.
  */
 export default function Onboarding() {
   const { name, consent, onboarded, ready } = useProfile()
   const secrets = useSecrets()
   const [step, setStep] = useState(0)
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState(name || '')
   const [keyVals, setKeyVals] = useState({})
   const [saving, setSaving] = useState(false)
 
@@ -25,9 +30,14 @@ export default function Onboarding() {
   // Already completed onboarding — show nothing.
   if (onboarded) return null
 
-  // Determine the first step to show.
-  // Step 0 = name (only if name is null), step 1 = consent, step 2 = keys.
-  const initialStep = name ? 1 : 0
+  // Determine which step to start on.
+  // Step 0 = name form, Step 1 = consent, Step 2 = keys.
+  // If we already have a name (from Google or previous entry), pre-fill and go to consent.
+  const hasName = !!name
+  const firstStep = hasName ? 1 : 0
+
+  // Derive current step: on first render use firstStep; after user advances use stored step.
+  const currentStep = step === 0 ? firstStep : step
 
   const submitName = async (e) => {
     e.preventDefault()
@@ -59,10 +69,8 @@ export default function Onboarding() {
 
   const finish = () => {
     haptic('medium')
-    // consent already set above; onboarded already saved above
+    // consent and onboarded already saved by acceptConsent
   }
-
-  const currentStep = step === 0 ? initialStep : step
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-bg/97 px-5 py-8 backdrop-blur-sm">
@@ -71,7 +79,7 @@ export default function Onboarding() {
           <Wordmark className="text-3xl" />
         </div>
 
-        {/* Step 0: name — only shown when name is null (non-Google users) */}
+        {/* Step 0: name — shown for users with no stored name (email sign-up) */}
         {currentStep === 0 && (
           <form onSubmit={submitName} className="card rounded-lg p-6 text-center">
             <h1 className="text-heading-md font-semibold">Welcome to NRVS</h1>

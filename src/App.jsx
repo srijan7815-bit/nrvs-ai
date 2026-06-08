@@ -51,19 +51,34 @@ export default function App() {
   const location = useLocation()
 
   // Keep the data store in sync with the signed-in user.
+  // NOTE: we depend on `user` (not user?.id) so that the effect re-runs
+  // whenever the user object changes — including when it goes from null
+  // (session loading) to a real user (session ready).
+  // The `if (loading)` guard is still important: we skip ALL init calls
+  // while Supabase is still restoring the session so we don't pass a
+  // stale user to initProfile.
   useEffect(() => {
     if (loading) return
-    const id = cloud ? user?.id ?? null : null
+    if (!user) return
+
+    const id = user.id
     initStoreForUser(id)
     initMemoryForUser(id)
-    initProfile(cloud ? user : null)
     initSharesForUser(id)
     initLibraryForUser(id)
     initSecretsForUser(id)
     initProjectsForUser(id)
     initApiKeysForUser(id)
     initFlowsForUser(id)
-  }, [user?.id, loading, cloud])
+
+    // initProfile needs the Google/OAuth display name (available synchronously
+    // from the user object) so it can pre-fill the name step for Google users.
+    const metaName =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      null
+    initProfile(user, metaName)
+  }, [user, loading, cloud])
 
   return (
     <>

@@ -20,129 +20,97 @@ function subscribe(cb) {
 }
 
 function persistName(name) {
-  try {
-    localStorage.setItem(LS_NAME, name)
-  } catch {
-    /* ignore */
-  }
+  try { localStorage.setItem(LS_NAME, name) } catch { /* ignore */ }
   if (userId && isCloudEnabled) {
-    // Fire-and-forget DB save — don't block the UI.
     supabase
       .from('profiles')
       .upsert({ id: userId, display_name: name }, { onConflict: 'id' })
-      .then(({ error }) => {
-        if (error) console.warn('[NRVS] Failed to save display_name:', error.message)
-      })
+      .then(({ error }) => { if (error) console.warn('[NRVS] saveName failed:', error.message) })
   }
 }
 
 function persistOnboarded(v) {
-  try {
-    localStorage.setItem(LS_ONBOARDED, v ? '1' : '0')
-  } catch {
-    /* ignore */
-  }
+  try { localStorage.setItem(LS_ONBOARDED, v ? '1' : '0') } catch { /* ignore */ }
   if (userId && isCloudEnabled) {
     supabase
       .from('profiles')
       .upsert({ id: userId, onboarded: !!v }, { onConflict: 'id' })
-      .then(({ error }) => {
-        if (error) console.warn('[NRVS] Failed to save onboarded:', error.message)
-      })
+      .then(({ error }) => { if (error) console.warn('[NRVS] setOnboarded failed:', error.message) })
   }
 }
 
 /**
  * Initialize profile for the given user.
  *
- * IMPORTANT: This is split into a SYNCHRONOUS pass and an ASYNC pass.
+ * Sync pass: sets state immediately so the first render has correct values.
+ *   - name: metaName (Google/OAuth) > localStorage > null
+ *   - onboarded: localStorage true > cloud true > false
+ *     This order prevents flashing "onboarding" for existing cloud users whose
+ *     DB query might fail or whose `onboarded` column doesn't exist yet.
  *
- * SYNC — runs immediately so the UI gets the correct `name` / `onboarded`
- * values before `ready` is set to `true`.  This prevents the Onboarding
- * overlay from rendering with stale (null) data.
- *
- * ASYNC — fetches cloud data in the background and fires a second `emit()`
- * if the cloud state differs from what we already set.
+ * Async pass (cloud only): reconciles cloud state after initial render.
+ *   - Only upgrades onboarded to true if DB confirms it.
+ *   - If DB says false or fails, keep the localStorage / default value.
  */
-export function initProfile(user) {
+export function initProfile(user, metaName) {
   userId = user?.id || null
 
-  // ── Determine starting values from all available sources ──
-  const localName = (() => {
-    try { return localStorage.getItem(LS_NAME) || null } catch { return null }
-  })()
-  const localConsent = (() => {
-    try { return localStorage.getItem(LS_CONSENT) === '1' } catch { return false }
-  })()
-  const localOnboarded = (() => {
-    try { return localStorage.getItem(LS_ONBOARDED) === '1' } catch { return false }
-  })()
-
-  // Google / OAuth name is available synchronously from the auth session.
-  const metaName =
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.name ||
-    null
-
-  // ── LOCAL / NO-CLOUD path ──
+  // ── Local-only fallback ──
   if (!userId || !isCloudEnabled) {
     state = {
-      name: localName || metaName || null,
-      consent: localConsent,
-      onboarded: localOnboarded,
+      name: metaName || localStorage.getItem(LS_NAME) || null,
+      consent: localStorage.getItem(LS_CONSENT) === '1',
+      onboarded: localStorage.getItem(LS_ONBOARDED) === '1',
       ready: true,
     }
     emit()
     return
   }
 
-  // ── CLOUD path: set synchronous values FIRST (before DB fetch) ──
-  // Priority: Google metadata > localStorage > null
+  // ── Cloud path: resolve values synchronously first ──
+  const localName = (() => { try { return localStorage.getItem(LS_NAME) || null } catch { return null } })()
+  const localConsent = (() => { try { return localStorage.getItem(LS_CONSENT) === '1' } catch { return false } })()
+  const localOnboarded = localStorage.getItem(LS_ONBOARDED) === '1'
+
+  // Priority: Google metadata name > localStorage > null
   const resolvedName = metaName || localName || null
 
-  // For brand-new users the DB fetch will return null (no row yet).
-  // We never treat "no DB row yet" as `onboarded = true`.
-  // Only an explicit `true` from the DB marks them as having completed.
+  // Trust localStorage for existing users; require explicit cloud DB true for new ones.
+  // localOnboarded = true means they've completed onboarding before on this browser.
+  // cloudOnboarded = true (when DB confirms) means they've completed onboarding on this account.
   state = {
     name: resolvedName,
     consent: localConsent,
-    onboarded: false, // DB fetch is the authoritative source
-    ready: true,      // UI gets a useful default immediately
+    onboarded: localOnboarded,  // start from localStorage (no flash for existing users)
+    ready: true,
   }
   emit()
 
-  // Save Google name to DB if we have one and it's not already stored.
-  if (resolvedName && resolvedName !== localName) {
-    persistName(resolvedName)
+  // Persist Google name to DB if we have one and it's better than what's stored.
+  if (metaName && metaName !== localName) {
+    persistName(metaName)
   }
 
-  // ── ASYNC: fetch cloud profile, reconcile if needed ──
+  // ── Async: fetch cloud profile, only upgrade onboarded to true ──
   supabase
     .from('profiles')
     .select('display_name, onboarded')
     .eq('id', userId)
     .maybeSingle()
     .then(({ data, error }) => {
-      if (error) return // table/column may not exist yet — ignore
+      if (error) return // table/column may not exist yet, or RLS blocks it — ignore
 
       const cloudName = data?.display_name || null
       const cloudOnboarded = !!data?.onboarded
 
-      // Reconcile: use cloud name if better than what we already have.
-      // (Cloud name is authoritative for signed-in users.)
+      // Reconcile name: use cloud name if it's better.
       const bestName = cloudName || resolvedName || null
 
-      // Only update if cloud state differs from what we set synchronously.
-      if (
-        state.name !== bestName ||
-        state.onboarded !== cloudOnboarded
-      ) {
-        state = {
-          name: bestName,
-          consent: state.consent,
-          onboarded: cloudOnboarded,
-          ready: true,
-        }
+      if (bestName !== state.name || state.onboarded !== cloudOnboarded) {
+        // Only flip onboarded to true if cloud confirms it.
+        // Keep current value (localStorage default) if cloud says false or null.
+        const newOnboarded = cloudOnboarded ? true : state.onboarded
+        state = { name: bestName, consent: state.consent, onboarded: newOnboarded, ready: true }
         emit()
       }
     })
@@ -151,11 +119,7 @@ export function initProfile(user) {
 export function setConsent(v) {
   state = { ...state, consent: !!v }
   emit()
-  try {
-    localStorage.setItem(LS_CONSENT, v ? '1' : '0')
-  } catch {
-    /* ignore */
-  }
+  try { localStorage.setItem(LS_CONSENT, v ? '1' : '0') } catch { /* ignore */ }
 }
 
 export function setOnboarded(v) {
