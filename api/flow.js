@@ -35,6 +35,7 @@ export default async function handler(req, res) {
   try {
     await requireAuth(req)
   } catch (err) {
+    if (err.cors) { res.statusCode=204; res.end(); return }
     sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
     return
   }

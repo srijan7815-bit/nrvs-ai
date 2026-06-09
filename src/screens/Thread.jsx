@@ -100,7 +100,11 @@ export default function Thread() {
               />
             )
           })}
-          {showThinking && <Thinking />}
+          {showThinking && (
+            <div className="max-w-[85%] pt-1">
+              <Thinking />
+            </div>
+          )}
           {error && (
             <div className="rounded-md border border-danger/40 bg-danger/10 px-4 py-2 text-body-sm text-danger">
               {error}

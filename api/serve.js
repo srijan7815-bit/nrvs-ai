@@ -11,7 +11,7 @@ const PORT = 3000
 
 export default async function handler(req, res) {
   try { await requireAuth(req) }
-  catch (err) { sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
+  catch (err) { if (err.cors) { res.statusCode=204; res.end(); return }; sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
