@@ -1,14 +1,44 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Brain, Trash2, Plus, Sparkles, User } from 'lucide-react'
+import { ChevronLeft, Brain, Trash2, Plus, Check, Sparkles, User } from 'lucide-react'
 import Layout from '../components/Layout'
-import MemoryPopup from '../components/MemoryPopup'
-import { useMemories, deleteMemory } from '../lib/memory'
+import { useMemories, addMemory, deleteMemory } from '../lib/memory'
+import { haptic } from '../lib/haptics'
 
 export default function Memory() {
   const navigate = useNavigate()
   const memories = useMemories()
-  const [addedFlash, setAddedFlash] = useState(false)
+  const [value, setValue] = useState('')
+  const [status, setStatus] = useState('idle') // idle | success
+  const textareaRef = useRef(null)
+
+  const handleChange = (e) => {
+    setValue(e.target.value)
+    const ta = textareaRef.current
+    if (ta) {
+      ta.style.height = 'auto'
+      ta.style.height = ta.scrollHeight + 'px'
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      handleAdd()
+    }
+  }
+
+  const handleAdd = async () => {
+    const text = value.trim()
+    if (!text) return
+    haptic('success')
+    await addMemory(text, 'manual')
+    setValue('')
+    setStatus('success')
+    const ta = textareaRef.current
+    if (ta) ta.style.height = 'auto'
+    setTimeout(() => setStatus('idle'), 1800)
+  }
 
   return (
     <Layout>
@@ -30,26 +60,41 @@ export default function Memory() {
           anytime.
         </p>
 
-        {/* Add memory — popup with animated textarea */}
-        <div className="mb-6 flex items-center gap-2">
-          <div className="relative flex flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3">
-            <Brain size={18} className="shrink-0 text-text-tertiary" />
-            <span className="flex-1 text-body text-text-tertiary">Add something for NRVS to remember…</span>
-            <div className="relative">
-              <MemoryPopup content="" onSuccess={() => setAddedFlash(true)}>
-                <button
-                  className={`relative z-10 flex items-center gap-1.5 rounded-pill px-4 py-2 text-body-sm transition-all ${
-                    addedFlash
-                      ? 'bg-accent-blue text-white'
-                      : 'bg-surface2 text-text-secondary hover:bg-border'
-                  }`}
-                  onClick={() => setAddedFlash(false)}
-                >
-                  {addedFlash ? <><Check size={13} /> Added</> : <><Plus size={13} /> Add</>}
-                </button>
-              </MemoryPopup>
-            </div>
-          </div>
+        {/* Direct add memory */}
+        <div className="mb-6 flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Add something for NRVS to remember…"
+            rows={2}
+            className="flex-1 resize-none overflow-hidden rounded-lg border border-border bg-surface px-3 py-2.5 text-body text-text-primary placeholder:text-text-tertiary focus:border-text-tertiary focus:outline-none"
+            style={{ minHeight: '52px', height: '52px' }}
+          />
+          <button
+            onClick={handleAdd}
+            disabled={!value.trim() || status === 'success'}
+            className={`flex h-[52px] shrink-0 items-center gap-1.5 rounded-lg px-4 text-body-sm transition-all ${
+              status === 'success'
+                ? 'bg-accent-blue text-white'
+                : value.trim()
+                ? 'bg-surface2 text-text-primary hover:bg-border'
+                : 'bg-surface2 text-text-tertiary'
+            }`}
+          >
+            {status === 'success' ? (
+              <>
+                <Check size={14} />
+                <span>Added</span>
+              </>
+            ) : (
+              <>
+                <Plus size={14} />
+                <span>Add</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* List */}
@@ -58,7 +103,7 @@ export default function Memory() {
             <Brain size={28} className="text-text-tertiary" />
             <p className="text-body text-text-secondary">No memories yet</p>
             <p className="text-body-sm text-text-tertiary">
-              Click "Add" above, or use the Brain icon on any message.
+              Type above and press "Add", or use the Brain icon on any message.
             </p>
           </div>
         ) : (
