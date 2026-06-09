@@ -49,28 +49,38 @@ function systemPrompt(memories, mcpServers) {
 }
 
 /**
- * Returns true if the text looks like a truncated response.
- * Detects: incomplete code blocks, mid-sentence cutoffs, broken formatting.
+ * Returns true if text looks truncated.
+ * Conservative — only flags genuinely broken structural endings.
+ * Avoids false positives on normal complete text.
  */
 function looksTruncated(text) {
   if (!text || !text.trim()) return false
   const t = text.trim()
-  // Incomplete code block (open ``` but no close)
-  const openCodeBlocks = (t.match(/```[^\n]*$/g) || []).length
-  const closeCodeBlocks = (t.match(/```$/gm) || []).length
-  if (openCodeBlocks > closeCodeBlocks) return true
-  // Ends mid-sentence: no terminal punctuation, last char is not ` ` `\n` `.` `!` `?`
-  if (!/[.!?]\s*$/.test(t) && !/\n\n\s*$/.test(t)) {
-    // Check for suspicious mid-word/mid-tag cutoffs
-    if (/[(\[{<]\s*$/.test(t)) return true        // open bracket/tag, not closed
-    if (/[a-z]\s*$/i.test(t)) return true         // ends mid-word
-    if (/\\$/.test(t)) return true               // ends with backslash
-    // If last char is a letter/number and line is short, likely truncated
-    if (/\S$/.test(t) && !/[.!?)\]"']$/.test(t) && t.length > 30) {
-      const lastLine = t.split('\n').pop()
-      if (lastLine.length > 10 && !lastLine.endsWith('.') && !lastLine.endsWith('!') && !lastLine.endsWith('?')) return true
-    }
+
+  // Case 1: Open code block (``` with no closing)
+  const openCode = (t.match(/```[^\n]*$/g) || []).length
+  const closeCode = (t.match(/```$/gm) || []).length
+  if (openCode > closeCode) return true
+
+  // Case 2: Unclosed HTML/JSX tag
+  if (/<[a-zA-Z][a-zA-Z0-9-]*\s*[^>]*$/.test(t)) return true
+  if (/<[^>]*(?![a-zA-Z]|$)$/.test(t) && /<[a-zA-Z]/.test(t)) return true
+
+  // Case 3: Unclosed braces in code context
+  if (/\{[^}]*$/.test(t) && t.length > 200) return true
+
+  // Case 4: Clearly cut off mid-word by token limit
+  const lastWord = t.split(/\s/).pop()
+  if (lastWord && lastWord.length > 1 && /[a-zA-Z]$/.test(lastWord)) {
+    const lastLine = t.split(/\n/).pop()
+    if (
+      lastLine.length > 5 &&
+      !/[.!?\)\]"']$/.test(lastLine) &&
+      !lastLine.includes('.') &&
+      lastWord.length > 3
+    ) return true
   }
+
   return false
 }
 
@@ -180,11 +190,11 @@ async function streamModelWithRetry(res, baseURL, apiKey, model, messages) {
   let full = await streamToBuffer(res, baseURL, apiKey, model, messages, STREAM_MAX_TOKENS)
   if (!full.trim()) return
 
-  // If truncated, try to continue once
+  // If truncated, continue once — targeted prompt that avoids repetition
   if (looksTruncated(full)) {
     const continued = await streamToBuffer(
       res, baseURL, apiKey, model,
-      [...messages, { role: 'assistant', content: full }, { role: 'user', content: 'Continue from where you left off. Complete your answer fully without repeating what you already said.' }],
+      [...messages, { role: 'assistant', content: full }, { role: 'user', content: 'Continue directly from where your previous message ended. Do not repeat anything you already said. Write only the rest of the answer.' }],
       CALL_MAX_TOKENS
     )
     if (continued.trim()) full += '\n\n' + continued.trim()
