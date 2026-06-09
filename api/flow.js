@@ -4,7 +4,7 @@
 
 export const config = { maxDuration: 60 }
 
-import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+import { requireAuth, setCORS, sendError } from './_lib/auth.js'
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
@@ -35,26 +35,28 @@ export default async function handler(req, res) {
   try {
     await requireAuth(req)
   } catch (err) {
-    if (err.cors) { res.statusCode=204; res.end(); return }
+    if (err?.cors) { setCORS(res); res.statusCode = 204; res.end(); return }
     sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
     return
   }
+
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     sendError(res, 503, 'Model backend not configured.')
     return
   }
-  const body = await parseBody(req)
+
+  const body = await readJson(req).catch(() => ({}))
   const objective = (body?.objective || '').trim()
   if (!objective) {
-    res.status(400).json({ error: 'objective is required' })
+    sendError(res, 400, 'objective is required')
     return
   }
+
   const model = body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
   const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
 
-  // Stream the model output so the gateway never times out (no 504). The client
-  // accumulates the text and parses the JSON mission at the end.
+  setCORS(res)
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.write(' ') // immediate keep-alive byte
@@ -63,15 +65,9 @@ export default async function handler(req, res) {
   try {
     const upstream = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model,
-        stream: true,
-        temperature: 0.6,
-        max_tokens: 2200,
+        model, stream: true, temperature: 0.6, max_tokens: 2200,
         messages: [
           { role: 'system', content: SYS },
           { role: 'user', content: `OBJECTIVE: ${objective}` },
@@ -79,9 +75,7 @@ export default async function handler(req, res) {
       }),
     })
     if (!upstream.ok || !upstream.body) {
-      res.write('\n__NRVS_FLOW_ERROR__')
-      res.end()
-      return
+      setCORS(res); res.write('\n__NRVS_FLOW_ERROR__'); res.end(); return
     }
     const reader = upstream.body.getReader()
     const decoder = new TextDecoder()
@@ -99,61 +93,21 @@ export default async function handler(req, res) {
         if (d === '[DONE]') continue
         try {
           const tok = JSON.parse(d)?.choices?.[0]?.delta?.content
-          if (tok) {
-            res.write(tok)
-            if (typeof res.flush === 'function') res.flush()
-          }
-        } catch {
-          /* ignore */
-        }
+          if (tok) { res.write(tok); if (typeof res.flush === 'function') res.flush() }
+        } catch { /* ignore */ }
       }
     }
     res.end()
   } catch (e) {
-    res.write('\n__NRVS_FLOW_ERROR__')
-    res.end()
-  }
-}
-
-// Exported so the client can reuse the exact same parser.
-export { parseMission }
-
-function parseMission(text, objective) {
-  let obj = null
-  try {
-    const m = text.match(/\{[\s\S]*\}/)
-    obj = JSON.parse(m ? m[0] : text)
-  } catch {
-    obj = {}
-  }
-  const arr = (x) => (Array.isArray(x) ? x : [])
-  return {
-    title: obj.title || objective.slice(0, 60),
-    summary: obj.summary || '',
-    roadmap: arr(obj.roadmap),
-    tasks: arr(obj.tasks).map((t) => ({
-      title: t.title || String(t),
-      status: t.status === 'done' || t.status === 'doing' ? t.status : 'todo',
-      priority: ['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium',
-    })),
-    research: arr(obj.research),
-    documents: arr(obj.documents),
-    timeline: arr(obj.timeline),
-    metrics: arr(obj.metrics),
+    setCORS(res); res.write('\n__NRVS_FLOW_ERROR__'); res.end()
   }
 }
 
 function readJson(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let data = ''
     req.on('data', (c) => (data += c))
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(data || '{}'))
-      } catch {
-        resolve({})
-      }
-    })
+    req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch (e) { reject(e) } })
     req.on('error', () => resolve({}))
   })
 }

@@ -2,19 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Brain, Trash2, Plus, Sparkles, User } from 'lucide-react'
 import Layout from '../components/Layout'
-import { useMemories, addMemory, deleteMemory } from '../lib/memory'
+import MemoryPopup from '../components/MemoryPopup'
+import { useMemories, deleteMemory } from '../lib/memory'
 
 export default function Memory() {
   const navigate = useNavigate()
   const memories = useMemories()
-  const [draft, setDraft] = useState('')
-
-  const onAdd = async (e) => {
-    e.preventDefault()
-    if (!draft.trim()) return
-    await addMemory(draft.trim(), 'manual')
-    setDraft('')
-  }
+  const [addedFlash, setAddedFlash] = useState(false)
 
   return (
     <Layout>
@@ -32,29 +26,31 @@ export default function Memory() {
 
         <p className="mb-5 text-body-sm text-text-tertiary">
           NRVS remembers these facts about you across every chat. It also saves
-          things it finds useful on its own. You’re in control — delete anything
+          things it finds useful on its own. You're in control — delete anything
           anytime.
         </p>
 
-        {/* Add memory */}
-        <form onSubmit={onAdd} className="mb-6 flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3 focus-within:border-text-tertiary">
+        {/* Add memory — popup with animated textarea */}
+        <div className="mb-6 flex items-center gap-2">
+          <div className="relative flex flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3">
             <Brain size={18} className="shrink-0 text-text-tertiary" />
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Add something for NRVS to remember…"
-              className="h-11 w-full bg-transparent text-body text-text-primary placeholder:text-text-tertiary focus:outline-none"
-            />
+            <span className="flex-1 text-body text-text-tertiary">Add something for NRVS to remember…</span>
+            <div className="relative">
+              <MemoryPopup content="" onSuccess={() => setAddedFlash(true)}>
+                <button
+                  className={`relative z-10 flex items-center gap-1.5 rounded-pill px-4 py-2 text-body-sm transition-all ${
+                    addedFlash
+                      ? 'bg-accent-blue text-white'
+                      : 'bg-surface2 text-text-secondary hover:bg-border'
+                  }`}
+                  onClick={() => setAddedFlash(false)}
+                >
+                  {addedFlash ? <><Check size={13} /> Added</> : <><Plus size={13} /> Add</>}
+                </button>
+              </MemoryPopup>
+            </div>
           </div>
-          <button
-            type="submit"
-            disabled={!draft.trim()}
-            className="btn-primary h-11 px-4 text-body-sm disabled:opacity-40"
-          >
-            <Plus size={16} /> Add
-          </button>
-        </form>
+        </div>
 
         {/* List */}
         {memories.length === 0 ? (
@@ -62,7 +58,7 @@ export default function Memory() {
             <Brain size={28} className="text-text-tertiary" />
             <p className="text-body text-text-secondary">No memories yet</p>
             <p className="text-body-sm text-text-tertiary">
-              Add one above, or use the “Remember” button on any message.
+              Click "Add" above, or use the Brain icon on any message.
             </p>
           </div>
         ) : (
@@ -70,7 +66,7 @@ export default function Memory() {
             {memories.map((m) => (
               <div
                 key={m.id}
-                className="card card-hover flex items-start gap-3 rounded-md px-4 py-3"
+                className="card card-hover group flex items-start gap-3 rounded-md px-4 py-3"
               >
                 {m.source === 'auto' ? (
                   <Sparkles
@@ -85,7 +81,7 @@ export default function Memory() {
                     title="Saved by you"
                   />
                 )}
-                <span className="flex-1 text-body text-text-primary">
+                <span className="flex-1 whitespace-pre-wrap text-body text-text-primary">
                   {m.content}
                 </span>
                 <button

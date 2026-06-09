@@ -6,7 +6,7 @@ import { Plus, Check, X } from 'lucide-react'
 import { addMemory } from '../lib/memory'
 import { haptic } from '../lib/haptics'
 
-export default function MemoryPopup({ content, children }) {
+export default function MemoryPopup({ content = '', children, onSuccess }) {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
   const [status, setStatus] = useState('idle') // idle | success | error
@@ -17,23 +17,21 @@ export default function MemoryPopup({ content, children }) {
   useEffect(() => {
     if (open) {
       setValue(content || '')
+      setStatus('idle')
       setTimeout(() => {
         textareaRef.current?.focus()
-        // Move cursor to end
         const len = textareaRef.current?.value.length || 0
         textareaRef.current?.setSelectionRange(len, len)
       }, 50)
-    } else {
-      setStatus('idle')
     }
   }, [open, content])
 
-  // Close on outside click
+  // Close on outside click (but not if clicking inside popup)
   useEffect(() => {
     if (!open) return
     const handler = (e) => {
       if (popupRef.current && !popupRef.current.contains(e.target)) {
-        // Check if click is on the trigger button
+        // Check if click is on the trigger button (data attribute)
         const trigger = e.target.closest('[data-memory-trigger]')
         if (!trigger) setOpen(false)
       }
@@ -45,7 +43,6 @@ export default function MemoryPopup({ content, children }) {
   // Auto-resize textarea
   const handleChange = (e) => {
     setValue(e.target.value)
-    // Reset height to auto, then set to scrollHeight
     const ta = textareaRef.current
     if (ta) {
       ta.style.height = 'auto'
@@ -59,6 +56,7 @@ export default function MemoryPopup({ content, children }) {
     haptic('success')
     await addMemory(text, 'manual')
     setStatus('success')
+    onSuccess?.(text)
     setTimeout(() => {
       setOpen(false)
     }, 1200)
@@ -77,20 +75,15 @@ export default function MemoryPopup({ content, children }) {
   return (
     <>
       {/* Trigger button */}
-      <button
+      <div
         data-memory-trigger
-        onClick={() => setOpen((v) => !v)}
-        className={`relative flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
-          open ? 'text-accent-blue' : 'text-text-tertiary hover:text-text-primary'
-        }`}
-        title="Add to memory"
+        className="relative flex h-full w-full items-center"
       >
-        {status === 'success' || open ? (
-          <Check size={14} />
-        ) : (
-          <>{children}</>
-        )}
-      </button>
+        {/* Our trigger children */}
+        <div className="flex h-full w-full cursor-pointer items-center" onClick={() => setOpen((v) => !v)}>
+          {children}
+        </div>
+      </div>
 
       <AnimatePresence>
         {open && (
@@ -100,7 +93,7 @@ export default function MemoryPopup({ content, children }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 4 }}
             transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-            className="absolute bottom-full right-0 z-50 mb-2 w-72 rounded-xl border border-border bg-surface2 shadow-xl"
+            className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-border bg-surface2 shadow-xl"
           >
             <div className="p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -108,7 +101,7 @@ export default function MemoryPopup({ content, children }) {
                   Add to memory
                 </span>
                 <button
-                  onClick={() => setOpen(false)}
+                  onClick={(e) => { e.stopPropagation(); setOpen(false) }}
                   className="flex h-5 w-5 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
                 >
                   <X size={12} />
@@ -133,13 +126,13 @@ export default function MemoryPopup({ content, children }) {
                 </span>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setOpen(false)}
+                    onClick={(e) => { e.stopPropagation(); setOpen(false) }}
                     className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-caption text-text-tertiary transition-colors hover:bg-border hover:text-text-primary"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={handleAdd}
+                    onClick={(e) => { e.stopPropagation(); handleAdd() }}
                     disabled={!value.trim() || status === 'success'}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-caption transition-all ${
                       status === 'success'

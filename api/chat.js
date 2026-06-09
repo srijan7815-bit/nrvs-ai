@@ -12,8 +12,7 @@
 
 import { webSearch, runCode, fileExplorer, TOOL_DEFINITIONS } from './_tools.js'
 import { ORIGIN_STORY, shouldAnswerOrigin } from './_origin.js'
-import { requireAuth, parseBody, sendError } from './_lib/auth.js'
-
+import { requireAuth, setCORS, sendError } from './_lib/auth.js'
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
@@ -54,20 +53,25 @@ export default async function handler(req, res) {
   try {
     await requireAuth(req)
   } catch (err) {
-    if (err.cors) { res.statusCode=204; res.end(); return }
+    if (err?.cors) { setCORS(res); res.statusCode = 204; res.end(); return }
     sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
     return
   }
 
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
-    return
+    setCORS(res); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
   }
 
-  const body = await readJson(req)
+  let body
+  try {
+    body = await readJson(req)
+  } catch {
+    sendError(res, 400, 'Invalid JSON body')
+    return
+  }
   const messages = Array.isArray(body?.messages) ? body.messages : []
   if (!messages.length) {
-    res.status(400).json({ error: 'messages[] is required' })
+    sendError(res, 400, 'messages[] is required')
     return
   }
 
@@ -78,10 +82,11 @@ export default async function handler(req, res) {
   const mcpServers = Array.isArray(body?.mcpServers) ? body.mcpServers : []
   const toolsEnabled = body?.tools !== false && !image // no tools in vision turns
 
-  let model = image
+  const model = image
     ? VISION_MODEL
     : body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
 
+  setCORS(res)
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-NRVS-Mode', apiKey ? 'live' : 'demo')
@@ -93,15 +98,13 @@ export default async function handler(req, res) {
       res.write(line + '\n')
       await new Promise((r) => setTimeout(r, 14))
     }
-    res.end()
-    return
+    res.end(); return
   }
 
   // ── demo fallback ──
   if (!apiKey) {
     await streamSimulated(res, lastUserText(messages))
-    res.end()
-    return
+    res.end(); return
   }
 
   const convo = [
@@ -119,45 +122,26 @@ export default async function handler(req, res) {
   const lastText = lastUserText(messages).toLowerCase()
   const mayNeedTool =
     toolsEnabled &&
-    (/\b(search|google|look up|latest|news|today|current|right now|weather|price|stock|score|who won|how much is)\b/.test(
-      lastText
-    ) ||
-      /\b(run|execute|compute|calculate|evaluate|test this code|what('?s| is) the output|result of)\b/.test(
-        lastText
-      ) ||
-      /\b(file|\.csv|\.json|\.zip|\.txt|extract|unzip|parse the|read the file|attached file)\b/.test(
-        lastText
-      ))
+    (/\b(search|google|look up|latest|news|today|current|right now|weather|price|stock|score|who won|how much is)\b/.test(lastText) ||
+      /\b(run|execute|compute|calculate|evaluate|test this code|what('?s| is) the output|result of)\b/.test(lastText) ||
+      /\b(file|\.csv|\.json|\.zip|\.txt|extract|unzip|parse the|read the file|attached file)\b/.test(lastText))
 
   try {
     // Tool loop: only when the request likely needs a tool.
     const maxRounds = mayNeedTool ? 3 : 0
     for (let round = 0; round < maxRounds; round++) {
       if (!toolsEnabled) break
-      const decision = await callModel(baseURL, apiKey, model, convo, {
-        stream: false,
-        tools: TOOL_DEFINITIONS,
-        maxTokens: 512,
-      })
+      const decision = await callModel(baseURL, apiKey, model, convo, { stream: false, tools: TOOL_DEFINITIONS, maxTokens: 512 })
       const msg = decision?.choices?.[0]?.message
       const toolCalls = msg?.tool_calls
       if (!toolCalls || !toolCalls.length) break
 
-      // record the assistant's tool-call message
-      convo.push({
-        role: 'assistant',
-        content: msg.content || '',
-        tool_calls: toolCalls,
-      })
+      convo.push({ role: 'assistant', content: msg.content || '', tool_calls: toolCalls })
 
       for (const tc of toolCalls) {
         const name = tc.function?.name
         let args = {}
-        try {
-          args = JSON.parse(tc.function?.arguments || '{}')
-        } catch {
-          /* ignore */
-        }
+        try { args = JSON.parse(tc.function?.arguments || '{}') } catch { /* ignore */ }
 
         sendTool(res, { status: 'start', tool: name, args })
         let result
@@ -166,28 +150,20 @@ export default async function handler(req, res) {
         } else if (name === 'run_code') {
           result = await runCode(args.code || '', args.language || 'python')
         } else if (name === 'file_explorer') {
-          result = await fileExplorer({
-            files: args.files || [],
-            command: args.command || '',
-            readBack: args.readBack || [],
-          })
+          result = await fileExplorer({ files: args.files || [], command: args.command || '', readBack: args.readBack || [] })
         } else {
           result = { error: `Unknown tool: ${name}` }
         }
         sendTool(res, { status: 'done', tool: name, args, result })
 
-        convo.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          name,
-          content: safeToolContent(result),
-        })
+        convo.push({ role: 'tool', tool_call_id: tc.id, name, content: safeToolContent(result) })
       }
     }
 
     // Final streamed answer (no tools so it commits to text).
     await streamModel(res, baseURL, apiKey, model, convo)
   } catch (err) {
+    setCORS(res)
     res.write(`\n\n_Error: ${err?.message || 'request failed'}_`)
   }
   res.end()
@@ -198,19 +174,8 @@ export default async function handler(req, res) {
 async function callModel(baseURL, apiKey, model, messages, { stream, tools, maxTokens }) {
   const r = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      stream: !!stream,
-      temperature: 0.6,
-      top_p: 0.95,
-      max_tokens: maxTokens || 2048,
-      messages,
-      ...(tools ? { tools, tool_choice: 'auto' } : {}),
-    }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, stream: !!stream, temperature: 0.6, top_p: 0.95, max_tokens: maxTokens || 2048, messages, ...(tools ? { tools, tool_choice: 'auto' } : {}) }),
   })
   if (!r.ok) {
     const t = await r.text().catch(() => '')
@@ -222,20 +187,11 @@ async function callModel(baseURL, apiKey, model, messages, { stream, tools, maxT
 async function streamModel(res, baseURL, apiKey, model, messages) {
   const upstream = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      stream: true,
-      temperature: 0.6,
-      top_p: 0.95,
-      max_tokens: 4096,
-      messages,
-    }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, stream: true, temperature: 0.6, top_p: 0.95, max_tokens: 4096, messages }),
   })
   if (!upstream.ok || !upstream.body) {
+    setCORS(res)
     const t = await upstream.text().catch(() => '')
     res.write(`\n\n_Error: model ${model} (${upstream.status})_ ${t.slice(0, 80)}`)
     return
@@ -248,14 +204,8 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
   let reasoningBuf = ''
 
   const finish = () => {
-    // Fallback: a reasoning model produced only chain-of-thought and no final
-    // answer (e.g. truncated). Surface a cleaned tail of the reasoning so the
-    // bubble isn't empty — never the raw "thinking" preamble.
     if (!emitted && reasoningBuf.trim()) {
-      const cleaned = reasoningBuf
-        .split(/\n\n+/)
-        .filter(Boolean)
-        .slice(-1)[0] || reasoningBuf
+      const cleaned = reasoningBuf.split(/\n\n+/).filter(Boolean).slice(-1)[0] || reasoningBuf
       res.write(cleaned.trim())
     }
   }
@@ -270,27 +220,15 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
       const t = line.trim()
       if (!t.startsWith('data:')) continue
       const data = t.slice(5).trim()
-      if (data === '[DONE]') {
-        finish()
-        return
-      }
+      if (data === '[DONE]') { finish(); return }
       try {
         const parsed = JSON.parse(data)
         const delta = parsed?.choices?.[0]?.delta || {}
         const content = delta.content
         const reasoning = delta.reasoning_content || delta.reasoning
-        // Reasoning models stream their chain-of-thought in `reasoning_content`.
-        // DISCARD it (buffer only for the empty-answer fallback) so it never
-        // leaks into the visible answer — only `content` is shown.
-        if (content) {
-          emitted = true
-          res.write(content)
-        } else if (reasoning) {
-          reasoningBuf += reasoning
-        }
-      } catch {
-        /* ignore partials */
-      }
+        if (content) { emitted = true; res.write(content) }
+        else if (reasoning) { reasoningBuf += reasoning }
+      } catch { /* ignore partials */ }
     }
   }
   finish()
@@ -310,10 +248,7 @@ function buildMessages(messages, image) {
         mapped[i] = {
           role: 'user',
           content: [
-            {
-              type: 'text',
-              text: mapped[i].content || 'Describe / extract the text from this image.',
-            },
+            { type: 'text', text: mapped[i].content || 'Describe / extract the text from this image.' },
             { type: 'image_url', image_url: { url: image } },
           ],
         }
@@ -324,7 +259,6 @@ function buildMessages(messages, image) {
   return mapped
 }
 
-// Cap string fields BEFORE serializing so tool JSON is never cut mid-string.
 function safeToolContent(result) {
   const cap = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s)
   let safe = result
@@ -350,15 +284,12 @@ function safeToolContent(result) {
 }
 
 function readJson(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let data = ''
     req.on('data', (c) => (data += c))
     req.on('end', () => {
-      try {
-        resolve(JSON.parse(data || '{}'))
-      } catch {
-        resolve({})
-      }
+      try { resolve(JSON.parse(data || '{}')) }
+      catch (e) { reject(e) }
     })
     req.on('error', () => resolve({}))
   })
@@ -375,7 +306,7 @@ async function streamSimulated(res, userText) {
   const q = (userText || '').trim()
   const reply = q
     ? `You said:\n\n> ${q.replace(/[<>]/g, '')}\n\nI'm in **demo mode** — set \`OPENAI_API_KEY\` on Vercel to enable real AI.`
-    : 'Say something and I’ll respond! (Demo mode.)'
+    : 'Say something and I\'ll respond! (Demo mode.)'
   const tokens = reply.match(/\S+\s*/g) || [reply]
   for (const t of tokens) {
     res.write(t)
