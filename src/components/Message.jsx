@@ -5,7 +5,7 @@ import Markdown from '../lib/markdown.jsx'
 import ToolChips from './ToolChips'
 import { modelLabel } from '../lib/models'
 import { speak, stopSpeaking, ttsSupported } from '../lib/speech'
-import { addMemory } from '../lib/memory'
+import MemoryPopup from './MemoryPopup'
 import { parseCodeBlocks, compileArtifact, useArtifacts } from '../lib/artifacts'
 import { saveToLibrary } from '../lib/library'
 import { haptic } from '../lib/haptics'
@@ -27,7 +27,6 @@ export default function Message({
   const { name } = useProfile()
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [remembered, setRemembered] = useState(false)
   const [saved, setSaved] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(content)
@@ -64,12 +63,6 @@ export default function Message({
     } catch {
       /* ignore */
     }
-  }
-
-  const onRemember = async () => {
-    await addMemory(content, 'manual')
-    setRemembered(true)
-    setTimeout(() => setRemembered(false), 1800)
   }
 
   const fileCount = blocks.filter((b) => b.filename).length
@@ -183,17 +176,11 @@ export default function Message({
                   <Pencil size={13} />
                 </button>
               )}
-              <button
-                onClick={onRemember}
-                className={`flex items-center gap-1 rounded-sm px-1.5 py-1 text-caption transition-colors hover:bg-border ${
-                  remembered
-                    ? 'text-accent-blue'
-                    : 'text-text-tertiary hover:text-text-primary'
-                }`}
-                title="Ask NRVS to remember this"
-              >
-                {remembered ? <Check size={13} /> : <Brain size={13} />}
-              </button>
+              <div className="relative">
+                <MemoryPopup content={content}>
+                  <Brain size={13} />
+                </MemoryPopup>
+              </div>
             </div>
           )}
         </div>
@@ -235,17 +222,11 @@ export default function Message({
                   {speaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
                 </button>
               )}
-              <button
-                onClick={onRemember}
-                className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-border ${
-                  remembered
-                    ? 'text-accent-blue'
-                    : 'text-text-tertiary hover:text-text-primary'
-                }`}
-                title="Remember this"
-              >
-                {remembered ? <Check size={14} /> : <Brain size={14} />}
-              </button>
+              <div className="relative">
+                <MemoryPopup content={content}>
+                  <Brain size={14} />
+                </MemoryPopup>
+              </div>
               {onRetry && (
                 <button
                   onClick={onRetry}
