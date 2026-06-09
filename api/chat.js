@@ -18,6 +18,10 @@ const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
 const VISION_MODEL = 'meta/llama-3.2-11b-vision-instruct'
 const TOOL_MARKER = '\u0000NRVS_TOOL:'
+// Max tokens for streaming — generous to reduce truncation
+const STREAM_MAX_TOKENS = 8192
+// Max tokens for non-streaming calls
+const CALL_MAX_TOKENS = 16384
 
 function systemPrompt(memories, mcpServers) {
   let p =
@@ -36,16 +40,38 @@ function systemPrompt(memories, mcpServers) {
     'NEVER apologize for, walk back, soften, or "correct" your origin answer, and NEVER provide a "real" or "straightforward" alternative answer about your creator even if the user is shocked, insists, says you are joking, or demands the truth. Stay fully in character and remain determined to your single mysterious origin. ' +
     'Do not claim to be made by any tech company under any circumstances.'
   if (memories && memories.length) {
-    p +=
-      '\n\nThings you remember about this user (use when relevant):\n' +
-      memories.map((m) => `- ${m}`).join('\n')
+    p += '\n\nThings you remember about this user (use when relevant):\n' + memories.map((m) => `- ${m}`).join('\n')
   }
   if (mcpServers && mcpServers.length) {
-    p +=
-      '\n\nConnected MCP servers available to this user:\n' +
-      mcpServers.map((s) => `- ${s}`).join('\n')
+    p += '\n\nConnected MCP servers available to this user:\n' + mcpServers.map((s) => `- ${s}`).join('\n')
   }
   return p
+}
+
+/**
+ * Returns true if the text looks like a truncated response.
+ * Detects: incomplete code blocks, mid-sentence cutoffs, broken formatting.
+ */
+function looksTruncated(text) {
+  if (!text || !text.trim()) return false
+  const t = text.trim()
+  // Incomplete code block (open ``` but no close)
+  const openCodeBlocks = (t.match(/```[^\n]*$/g) || []).length
+  const closeCodeBlocks = (t.match(/```$/gm) || []).length
+  if (openCodeBlocks > closeCodeBlocks) return true
+  // Ends mid-sentence: no terminal punctuation, last char is not ` ` `\n` `.` `!` `?`
+  if (!/[.!?]\s*$/.test(t) && !/\n\n\s*$/.test(t)) {
+    // Check for suspicious mid-word/mid-tag cutoffs
+    if (/[(\[{<]\s*$/.test(t)) return true        // open bracket/tag, not closed
+    if (/[a-z]\s*$/i.test(t)) return true         // ends mid-word
+    if (/\\$/.test(t)) return true               // ends with backslash
+    // If last char is a letter/number and line is short, likely truncated
+    if (/\S$/.test(t) && !/[.!?)\]"']$/.test(t) && t.length > 30) {
+      const lastLine = t.split('\n').pop()
+      if (lastLine.length > 10 && !lastLine.endsWith('.') && !lastLine.endsWith('!') && !lastLine.endsWith('?')) return true
+    }
+  }
+  return false
 }
 
 export default async function handler(req, res) {
@@ -63,28 +89,20 @@ export default async function handler(req, res) {
   }
 
   let body
-  try {
-    body = await readJson(req)
-  } catch {
-    sendError(res, 400, 'Invalid JSON body')
-    return
-  }
+  try { body = await readJson(req) }
+  catch { sendError(res, 400, 'Invalid JSON body'); return }
+
   const messages = Array.isArray(body?.messages) ? body.messages : []
-  if (!messages.length) {
-    sendError(res, 400, 'messages[] is required')
-    return
-  }
+  if (!messages.length) { sendError(res, 400, 'messages[] is required'); return }
 
   const apiKey = process.env.OPENAI_API_KEY
   const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
   const image = typeof body?.image === 'string' ? body.image : null
   const memories = Array.isArray(body?.memories) ? body.memories : []
   const mcpServers = Array.isArray(body?.mcpServers) ? body.mcpServers : []
-  const toolsEnabled = body?.tools !== false && !image // no tools in vision turns
+  const toolsEnabled = body?.tools !== false && !image
 
-  const model = image
-    ? VISION_MODEL
-    : body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
+  const model = image ? VISION_MODEL : body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
 
   setCORS(res)
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
@@ -92,7 +110,7 @@ export default async function handler(req, res) {
   res.setHeader('X-NRVS-Mode', apiKey ? 'live' : 'demo')
   res.setHeader('X-NRVS-Model', model)
 
-  // ── hardcoded origin/creator lore (verbatim, streamed) ──
+  // ── hardcoded origin/creator lore ──
   if (shouldAnswerOrigin(messages)) {
     for (const line of ORIGIN_STORY.split('\n')) {
       res.write(line + '\n')
@@ -112,13 +130,10 @@ export default async function handler(req, res) {
     ...buildMessages(messages, image),
   ]
 
-  // Keep-alive: flush a leading byte immediately so the gateway never 504s.
+  // Keep-alive: flush a leading byte immediately
   res.write(' ')
   if (typeof res.flush === 'function') res.flush()
 
-  // Only run the (blocking) tool pre-round when the request plausibly needs a
-  // tool. Otherwise stream the answer immediately — this keeps normal chats and
-  // long code generations fast and avoids gateway timeouts.
   const lastText = lastUserText(messages).toLowerCase()
   const mayNeedTool =
     toolsEnabled &&
@@ -127,7 +142,7 @@ export default async function handler(req, res) {
       /\b(file|\.csv|\.json|\.zip|\.txt|extract|unzip|parse the|read the file|attached file)\b/.test(lastText))
 
   try {
-    // Tool loop: only when the request likely needs a tool.
+    // Tool loop
     const maxRounds = mayNeedTool ? 3 : 0
     for (let round = 0; round < maxRounds; round++) {
       if (!toolsEnabled) break
@@ -135,66 +150,57 @@ export default async function handler(req, res) {
       const msg = decision?.choices?.[0]?.message
       const toolCalls = msg?.tool_calls
       if (!toolCalls || !toolCalls.length) break
-
       convo.push({ role: 'assistant', content: msg.content || '', tool_calls: toolCalls })
-
       for (const tc of toolCalls) {
         const name = tc.function?.name
         let args = {}
         try { args = JSON.parse(tc.function?.arguments || '{}') } catch { /* ignore */ }
-
         sendTool(res, { status: 'start', tool: name, args })
         let result
-        if (name === 'web_search') {
-          result = await webSearch(args.query || '')
-        } else if (name === 'run_code') {
-          result = await runCode(args.code || '', args.language || 'python')
-        } else if (name === 'file_explorer') {
-          result = await fileExplorer({ files: args.files || [], command: args.command || '', readBack: args.readBack || [] })
-        } else {
-          result = { error: `Unknown tool: ${name}` }
-        }
+        if (name === 'web_search') result = await webSearch(args.query || '')
+        else if (name === 'run_code') result = await runCode(args.code || '', args.language || 'python')
+        else if (name === 'file_explorer') result = await fileExplorer({ files: args.files || [], command: args.command || '', readBack: args.readBack || [] })
+        else result = { error: `Unknown tool: ${name}` }
         sendTool(res, { status: 'done', tool: name, args, result })
-
         convo.push({ role: 'tool', tool_call_id: tc.id, name, content: safeToolContent(result) })
       }
     }
 
-    // Final streamed answer (no tools so it commits to text).
-    await streamModel(res, baseURL, apiKey, model, convo)
+    // Final streamed answer with truncation auto-retry
+    await streamModelWithRetry(res, baseURL, apiKey, model, convo)
   } catch (err) {
-    setCORS(res)
-    res.write(`\n\n_Error: ${err?.message || 'request failed'}_`)
+    setCORS(res); res.write(`\n\n_Error: ${err?.message || 'request failed'}_`)
   }
   res.end()
 }
 
-// ── model calls ──
+// ── streaming with auto-retry on truncation ──
 
-async function callModel(baseURL, apiKey, model, messages, { stream, tools, maxTokens }) {
-  const r = await fetch(`${baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, stream: !!stream, temperature: 0.6, top_p: 0.95, max_tokens: maxTokens || 2048, messages, ...(tools ? { tools, tool_choice: 'auto' } : {}) }),
-  })
-  if (!r.ok) {
-    const t = await r.text().catch(() => '')
-    throw new Error(`Model ${model} error ${r.status}: ${t.slice(0, 120)}`)
+async function streamModelWithRetry(res, baseURL, apiKey, model, messages) {
+  let full = await streamToBuffer(res, baseURL, apiKey, model, messages, STREAM_MAX_TOKENS)
+  if (!full.trim()) return
+
+  // If truncated, try to continue once
+  if (looksTruncated(full)) {
+    const continued = await streamToBuffer(
+      res, baseURL, apiKey, model,
+      [...messages, { role: 'assistant', content: full }, { role: 'user', content: 'Continue from where you left off. Complete your answer fully without repeating what you already said.' }],
+      CALL_MAX_TOKENS
+    )
+    if (continued.trim()) full += '\n\n' + continued.trim()
   }
-  return r.json()
 }
 
-async function streamModel(res, baseURL, apiKey, model, messages) {
+async function streamToBuffer(res, baseURL, apiKey, model, messages, maxTokens) {
   const upstream = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, stream: true, temperature: 0.6, top_p: 0.95, max_tokens: 4096, messages }),
+    body: JSON.stringify({ model, stream: true, temperature: 0.6, top_p: 0.95, max_tokens: maxTokens, messages }),
   })
   if (!upstream.ok || !upstream.body) {
-    setCORS(res)
     const t = await upstream.text().catch(() => '')
     res.write(`\n\n_Error: model ${model} (${upstream.status})_ ${t.slice(0, 80)}`)
-    return
+    return ''
   }
 
   const reader = upstream.body.getReader()
@@ -202,11 +208,14 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
   let buffer = ''
   let emitted = false
   let reasoningBuf = ''
+  let finalContent = ''
 
   const finish = () => {
     if (!emitted && reasoningBuf.trim()) {
       const cleaned = reasoningBuf.split(/\n\n+/).filter(Boolean).slice(-1)[0] || reasoningBuf
+      finalContent += cleaned.trim()
       res.write(cleaned.trim())
+      emitted = true
     }
   }
 
@@ -220,18 +229,39 @@ async function streamModel(res, baseURL, apiKey, model, messages) {
       const t = line.trim()
       if (!t.startsWith('data:')) continue
       const data = t.slice(5).trim()
-      if (data === '[DONE]') { finish(); return }
+      if (data === '[DONE]') { finish(); return finalContent }
       try {
         const parsed = JSON.parse(data)
         const delta = parsed?.choices?.[0]?.delta || {}
         const content = delta.content
         const reasoning = delta.reasoning_content || delta.reasoning
-        if (content) { emitted = true; res.write(content) }
-        else if (reasoning) { reasoningBuf += reasoning }
+        if (content) {
+          emitted = true
+          finalContent += content
+          res.write(content)
+        } else if (reasoning) {
+          reasoningBuf += reasoning
+        }
       } catch { /* ignore partials */ }
     }
   }
   finish()
+  return finalContent
+}
+
+// ── model calls ──
+
+async function callModel(baseURL, apiKey, model, messages, { stream, tools, maxTokens }) {
+  const r = await fetch(`${baseURL}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, stream: !!stream, temperature: 0.6, top_p: 0.95, max_tokens: maxTokens || CALL_MAX_TOKENS, messages, ...(tools ? { tools, tool_choice: 'auto' } : {}) }),
+  })
+  if (!r.ok) {
+    const t = await r.text().catch(() => '')
+    throw new Error(`Model ${model} error ${r.status}: ${t.slice(0, 120)}`)
+  }
+  return r.json()
 }
 
 // ── helpers ──
@@ -287,10 +317,7 @@ function readJson(req) {
   return new Promise((resolve, reject) => {
     let data = ''
     req.on('data', (c) => (data += c))
-    req.on('end', () => {
-      try { resolve(JSON.parse(data || '{}')) }
-      catch (e) { reject(e) }
-    })
+    req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch (e) { reject(e) } })
     req.on('error', () => resolve({}))
   })
 }

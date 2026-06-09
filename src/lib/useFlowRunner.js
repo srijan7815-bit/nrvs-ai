@@ -3,7 +3,6 @@
 // inline and marking items done. Reactive + cancellable.
 import { useCallback, useRef, useState } from 'react'
 import { execItem, getFlow, updateFlowData } from './flows'
-import { saveToLibrary } from './library'
 import { haptic } from './haptics'
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 }
@@ -107,16 +106,6 @@ export function useFlowRunner(flowId, model) {
           j === i ? { ...x, content: out, done: true } : x
         )
         updateFlowData(flowId, { ...m, documents: next })
-        // also save to Library so generated docs are reachable
-        try {
-          await saveToLibrary({
-            title: d.name,
-            kind: 'markdown',
-            content: out,
-          })
-        } catch {
-          /* ignore */
-        }
         await sleep(ITEM_DELAY_MS)
       }
 
