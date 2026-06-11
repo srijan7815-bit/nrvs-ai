@@ -3,7 +3,7 @@
 // starts the detected server (Node/Python/static), and returns a public URL.
 // The sandbox auto-expires after a few minutes.
 
-import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+import { requireAuth, setCORS, sendError, parseBody } from './_lib/auth.js'
 
 export const config = { maxDuration: 60 }
 
@@ -11,21 +11,32 @@ const PORT = 3000
 
 export default async function handler(req, res) {
   try { await requireAuth(req) }
-  catch (err) { if (err.cors) { res.statusCode=204; res.end(); return }; sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
+  catch (err) {
+    if (err?.cors) { setCORS(res, req); res.statusCode = 204; res.end(); return }
+    sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
+    return
+  }
+  if (req.method === 'OPTIONS') { setCORS(res, req); res.statusCode = 204; res.end(); return }
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
+    setCORS(res, req); res.statusCode = 405; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Method not allowed' }))
     return
   }
   const key = process.env.E2B_API_KEY
   if (!key) {
-    res.status(503).json({ error: 'Execution not configured (E2B_API_KEY missing).' })
+    setCORS(res, req); res.statusCode = 503; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Execution not configured (E2B_API_KEY missing).' }))
     return
   }
 
-  const body = await parseBody(req)
+  let body
+  try { body = await parseBody(req) }
+  catch (e) { sendError(res, 400, e.body?.error || 'Invalid JSON body'); return }
+
   const files = Array.isArray(body?.files) ? body.files : []
   if (!files.length) {
-    res.status(400).json({ error: 'files[] is required' })
+    setCORS(res, req); res.statusCode = 400; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'files[] is required' }))
     return
   }
 
@@ -137,12 +148,13 @@ export default async function handler(req, res) {
     }
 
     // Keep the sandbox alive (don't kill) so the user can interact with it.
-    res.status(200).json({
+    setCORS(res, req); res.statusCode = 200; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({
       url,
       sandboxId: sbx.sandboxId,
       ready: up,
       startCmd,
-    })
+    }))
   } catch (e) {
     if (sbx) {
       try {
@@ -151,21 +163,7 @@ export default async function handler(req, res) {
         /* ignore */
       }
     }
-    res.status(502).json({ error: 'Could not start the app: ' + (e?.message || 'unknown') })
+    setCORS(res, req); res.statusCode = 502; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Could not start the app: ' + (e?.message || 'unknown') }))
   }
-}
-
-function readJson(req) {
-  return new Promise((resolve) => {
-    let data = ''
-    req.on('data', (c) => (data += c))
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(data || '{}'))
-      } catch {
-        resolve({})
-      }
-    })
-    req.on('error', () => resolve({}))
-  })
 }

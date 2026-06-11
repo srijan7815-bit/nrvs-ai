@@ -1,6 +1,8 @@
 // Lightweight syntax highlighter — no external deps.
 // Returns HTML string with <span class="hl-..."> wrappers.
-// Language-aware keyword sets for JS, TS, Python, HTML, CSS, JSON, Bash, Rust, Go, Java, C++.
+// SECURITY: All branches escape the raw input FIRST, then wrap tokens in spans.
+// No branch ever passes raw user/LLM content through without escaping.
+
 const LANG_KEYWORDS = {
   javascript: ['async','await','function','const','let','var','return','if','else','for','while','do','switch','case','break','continue','try','catch','finally','throw','new','class','extends','import','export','default','from','of','in','typeof','instanceof','null','undefined','true','false','this','super','static','get','set','yield','delete','void','enum','interface','type','implements','private','public','protected','readonly','abstract','as','keyof','infer','never','unknown'],
   typescript: ['async','await','function','const','let','var','return','if','else','for','while','switch','case','break','continue','try','catch','finally','throw','new','class','extends','import','export','default','from','of','in','typeof','instanceof','null','undefined','true','false','this','super','static','get','set','yield','delete','void','enum','interface','type','implements','private','public','protected','readonly','abstract','as','keyof','infer','never','unknown','namespace','module','declare','readonly','keyof','extends'],
@@ -28,8 +30,9 @@ const HL_COLORS = {
   self:    'text-blue-300',
 }
 
+/** HTML-escape a string — used on ALL input before any markup is added. */
 function esc(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function span(cls, text) {
@@ -39,55 +42,59 @@ function span(cls, text) {
 /**
  * Highlight `code` string with optional `lang`.
  * Returns an HTML string with span wrappers.
+ * SECURITY: Every branch starts by escaping the raw code, so no untrusted
+ * content is ever injected raw into the DOM via dangerouslySetInnerHTML.
  */
 export function highlight(code, lang) {
   lang = (lang || '').toLowerCase()
   const kw = LANG_KEYWORDS[lang] || []
 
-  // For HTML, process tags and attributes specially
+  // ── SECURITY: Escape raw input FIRST for ALL branches ──
+  const safe = esc(code)
+
+  // For HTML, color tags and attributes on the ESCAPED content
   if (lang === 'html') {
-    return code
-      .replace(/(&lt;\/?[a-zA-Z][a-zA-Z0-9-]*)/g, (_, tag) => span(HL_COLORS.tag, esc(tag)))
-      .replace(/([a-zA-Z-]+)(=)/g, (_, attr, eq) => span(HL_COLORS.attr, esc(attr)) + esc(eq))
-      .replace(/(&gt;)/g, (_, g) => span(HL_COLORS.tag, esc(g)))
-      .replace(/(&lt;!--[\s\S]*?--&gt;)/g, (m) => span(HL_COLORS.comment, esc(m)))
+    return safe
+      .replace(/(&lt;\/?[a-zA-Z][a-zA-Z0-9-]*)/g, (_, tag) => span(HL_COLORS.tag, tag))
+      .replace(/([a-zA-Z-]+)(=)/g, (_, attr, eq) => span(HL_COLORS.attr, attr) + eq)
+      .replace(/(&gt;)/g, (_, g) => span(HL_COLORS.tag, g))
+      .replace(/(&lt;!--[\s\S]*?--&gt;)/g, (m) => span(HL_COLORS.comment, m))
   }
 
-  // For CSS, color property names and values
+  // For CSS, color property names and values on the ESCAPED content
   if (lang === 'css') {
-    return code
-      .replace(/([a-z-]+)(\s*:)/gi, (_, prop, colon) => span(HL_COLORS.prop, esc(prop)) + esc(colon))
-      .replace(/(#[0-9a-fA-F]{3,8})/g, (m) => span(HL_COLORS.string, esc(m)))
-      .replace(/(\d+\.?\d*)(px|em|rem|%|vh|vw|deg|s|ms)?/g, (m, n, u) => span(HL_COLORS.number, esc(m)))
-      .replace(/(\/\*[\s\S]*?\*\/)/g, (m) => span(HL_COLORS.comment, esc(m)))
+    return safe
+      .replace(/([a-z-]+)(\s*:)/gi, (_, prop, colon) => span(HL_COLORS.prop, prop) + colon)
+      .replace(/(#[0-9a-fA-F]{3,8})/g, (m) => span(HL_COLORS.string, m))
+      .replace(/(\d+\.?\d*)(px|em|rem|%|vh|vw|deg|s|ms)?/g, (m) => span(HL_COLORS.number, m))
+      .replace(/(\/\*[\s\S]*?\*\/)/g, (m) => span(HL_COLORS.comment, m))
   }
 
-  // For JSON — color keys and values
+  // For JSON — color keys and values on the ESCAPED content
   if (lang === 'json') {
-    return code
-      .replace(/(")([^"]+)("\s*:)/g, (_, q, key, rest) => span(HL_COLORS.prop, esc(key)) + ':')
-      .replace(/:(\s*)("(?:[^"\\]|\\.)*")/g, (m, sp, val) => ':' + span(HL_COLORS.string, esc(val)))
-      .replace(/:(\s*)(true|false|null)/g, (m, sp, v) => ':' + span(HL_COLORS.boolean, esc(v)))
-      .replace(/:(\s*)(-?\d+\.?\d*)/g, (m, sp, v) => ':' + span(HL_COLORS.number, esc(v)))
+    return safe
+      .replace(/(&quot;)([^&]+)(&quot;\s*:)/g, (_, q, key, rest) => span(HL_COLORS.prop, key) + ':')
+      .replace(/(:\s*)(&quot;(?:[^&]|\\.)*?&quot;)/g, (_, sp, val) => ':' + span(HL_COLORS.string, val))
+      .replace(/(:\s*)(true|false|null)/g, (_, sp, v) => ':' + span(HL_COLORS.boolean, v))
+      .replace(/(:\s*)(-?\d+\.?\d*)/g, (_, sp, v) => ':' + span(HL_COLORS.number, v))
   }
 
-  // Generic: HTML entities first (so tags get processed)
-  let out = esc(code)
+  // Generic: already escaped as `safe`
+  let out = safe
 
   // Strings (double and single quoted, template literals)
   out = out
-    .replace(/(&quot;[^&]*?&quot;|"(?:[^"\\]|\\.)*")/g, (m) => span(HL_COLORS.string, m))
-    .replace(/('(?:[^'\\]|\\.)*')/g, (m) => span(HL_COLORS.string, m))
+    .replace(/(&quot;[^&]*?&quot;|&quot;(?:[^&]|\\.)*?&quot;)/g, (m) => span(HL_COLORS.string, m))
+    .replace(/(&#39;(?:[^&]|\\.)*?&#39;)/g, (m) => span(HL_COLORS.string, m))
     .replace(/(`(?:[^`\\]|\\.)*`)/g, (m) => span(HL_COLORS.string, m))
 
   // Comments
   out = out
     .replace(/(\/\/[^\n]*)/g, (m) => span(HL_COLORS.comment, m))
-    .replace(/(#.*)/g, (m) => span(HL_COLORS.comment, m))
     .replace(/(\/\*[\s\S]*?\*\/)/g, (m) => span(HL_COLORS.comment, m))
 
   // Numbers
-  out = out.replace(/(\b\d+\.?\d*\b)/g, (m) => span(HL_COLORS.number, m))
+  out = out.replace(/\b(\d+\.?\d*)\b/g, (m) => span(HL_COLORS.number, m))
 
   // Keywords (word boundary)
   const kwRe = kw.length ? new RegExp('\\b(' + kw.join('|') + ')\\b', 'g') : null

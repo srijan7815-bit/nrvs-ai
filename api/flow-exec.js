@@ -28,10 +28,10 @@ function sys(objective, mission) {
 
 export default async function handler(req, res) {
   try { await requireAuth(req) }
-  catch (err) { if (err?.cors) { setCORS(res); res.statusCode = 204; res.end(); return }; sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
+  catch (err) { if (err?.cors) { setCORS(res, req); res.statusCode = 204; res.end(); return }; sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
 
   if (req.method !== 'POST') {
-    setCORS(res); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
+    setCORS(res, req); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
   }
 
   const apiKey = process.env.OPENAI_API_KEY
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       const calls = msg?.tool_calls
       if (!calls || !calls.length) {
         if (msg?.content) {
-          setCORS(res); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result: msg.content })); return
+          setCORS(res, req); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result: msg.content })); return
         }
         break
       }
@@ -90,7 +90,7 @@ export default async function handler(req, res) {
     // final answer (no tools)
     const final = await call(baseURL, apiKey, model, convo, { maxTokens: 2048 })
     const text = final?.choices?.[0]?.message?.content || '_(No result produced.)_'
-    setCORS(res); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result: text }))
+    setCORS(res, req); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result: text }))
   } catch (e) {
     sendError(res, 502, 'Execution failed: ' + (e?.message || 'unknown'))
   }
@@ -144,10 +144,16 @@ function safeToolContent(result) {
   }
 }
 
-function readJson(req) {
+function readJson(req, maxBytes) {
+  maxBytes = maxBytes || 512 * 1024
   return new Promise((resolve, reject) => {
     let data = ''
-    req.on('data', (c) => (data += c))
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > maxBytes) { reject(new Error('Body too large')); return }
+      data += c
+    })
     req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch (e) { reject(e) } })
     req.on('error', () => resolve({}))
   })

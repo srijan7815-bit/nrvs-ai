@@ -3,7 +3,7 @@
 // Returns [] when nothing notable. Uses a fast model + strict JSON instruction.
 
 
-import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+import { requireAuth, setCORS, parseBody, sendError } from './_lib/auth.js'
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const EXTRACT_MODEL = 'meta/llama-3.1-8b-instruct'
@@ -33,17 +33,30 @@ Each fact: short (max ~10 words), third person, about the user ("User is a docto
 
 export default async function handler(req, res) {
   try { await requireAuth(req) }
-  catch (err) { if (err.cors) { res.statusCode=204; res.end(); return }; sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
+  catch (err) {
+    if (err?.cors) { setCORS(res, req); res.statusCode = 204; res.end(); return }
+    sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
+    return
+  }
+  if (req.method === 'OPTIONS') { setCORS(res, req); res.statusCode = 204; res.end(); return }
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
+    setCORS(res, req); res.statusCode = 405; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Method not allowed' }))
     return
   }
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    res.status(200).json({ facts: [] })
+    setCORS(res, req); res.statusCode = 200; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ facts: [] }))
     return
   }
-  const body = await readJson(req)
+  let body
+  try { body = await parseBody(req) }
+  catch (e) {
+    setCORS(res, req); res.statusCode = 200; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ facts: [] }))
+    return
+  }
   const messages = Array.isArray(body?.messages) ? body.messages : []
   const transcript = messages
     .slice(-6)
@@ -102,10 +115,16 @@ function parseFacts(text) {
   return []
 }
 
-function readJson(req) {
+function readJson(req, maxBytes) {
+  maxBytes = maxBytes || 512 * 1024
   return new Promise((resolve) => {
     let data = ''
-    req.on('data', (c) => (data += c))
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > maxBytes) return
+      data += c
+    })
     req.on('end', () => {
       try {
         resolve(JSON.parse(data || '{}'))

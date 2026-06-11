@@ -4,7 +4,7 @@
 // back to NRVS's own rich native generation.
 // Streams plain text so it never times out; ends with the generated site code.
 
-import { requireAuth, parseBody, sendError } from './_lib/auth.js'
+import { requireAuth, setCORS, sendError, parseBody } from './_lib/auth.js'
 
 export const config = { maxDuration: 60 }
 
@@ -15,22 +15,34 @@ const FUISHAN_MODEL = 'google/gemma-4-31b-it'
 
 export default async function handler(req, res) {
   try { await requireAuth(req) }
-  catch (err) { if (err.cors) { res.statusCode=204; res.end(); return }; sendError(res, err.status||401, err.body?.error||'Unauthorized'); return }
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
+  catch (err) {
+    if (err?.cors) { setCORS(res, req); res.statusCode = 204; res.end(); return }
+    sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
     return
   }
-  const body = await readJson(req)
+  if (req.method === 'OPTIONS') { setCORS(res, req); res.statusCode = 204; res.end(); return }
+  if (req.method !== 'POST') {
+    setCORS(res, req); res.statusCode = 405; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Method not allowed' }))
+    return
+  }
+
+  let body
+  try { body = await parseBody(req) }
+  catch (e) { sendError(res, 400, e.body?.error || 'Invalid JSON body'); return }
+
   const prompt = (body?.prompt || '').trim()
   const googleKey = (body?.googleKey || '').trim()
   const model = body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
   if (!prompt) {
-    res.status(400).json({ error: 'prompt is required' })
+    setCORS(res, req); res.statusCode = 400; res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'prompt is required' }))
     return
   }
   const apiKey = process.env.OPENAI_API_KEY
   const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
 
+  setCORS(res, req)
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.write(' ')
@@ -166,19 +178,4 @@ export default async function handler(req, res) {
     res.write('\n_(Error: ' + (e?.message || 'failed') + ')_')
     res.end()
   }
-}
-
-function readJson(req) {
-  return new Promise((resolve) => {
-    let data = ''
-    req.on('data', (c) => (data += c))
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(data || '{}'))
-      } catch {
-        resolve({})
-      }
-    })
-    req.on('error', () => resolve({}))
-  })
 }

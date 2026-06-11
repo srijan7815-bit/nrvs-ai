@@ -7,7 +7,8 @@
 // Truncation detection + auto-retry on streaming responses.
 
 import { ORIGIN_STORY, shouldAnswerOrigin } from '../_origin.js'
-import { setCORS } from '../_lib/auth.js'
+import { setCORS, setPublicCORS } from '../_lib/auth.js'
+import { hashApiKey } from '../_lib/apikey.js'
 
 const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
@@ -38,12 +39,10 @@ function looksTruncated(text) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-api-key')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  setPublicCORS(res)
   if (req.method === 'OPTIONS') { res.status(204).end(); return }
   if (req.method !== 'POST') {
-    setCORS(res); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
+    setPublicCORS(res); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
   }
 
   // ── extract key ──
@@ -51,18 +50,20 @@ export default async function handler(req, res) {
   const headerKey = req.headers['x-api-key'] || ''
   const key = (auth.startsWith('Bearer ') ? auth.slice(7) : headerKey || '').trim()
   if (!key || !key.startsWith('nrvs-')) {
-    setCORS(res); res.statusCode = 401; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Missing or invalid NRVS API key.' })); return
+    setPublicCORS(res); res.statusCode = 401; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Missing or invalid NRVS API key.' })); return
   }
 
-  // ── validate key via Supabase service role ──
+  // ── validate key via Supabase service role (hash-based lookup) ──
   const SUP_URL = process.env.VITE_SUPABASE_URL
   const SR = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!SUP_URL || !SR) {
-    setCORS(res); res.statusCode = 503; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'API not configured on the server.' })); return
+    setPublicCORS(res); res.statusCode = 503; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'API not configured on the server.' })); return
   }
   let valid = false
   try {
-    const r = await fetch(`${SUP_URL}/rest/v1/api_keys?key=eq.${encodeURIComponent(key)}&select=id`, { headers: { apikey: SR, Authorization: `Bearer ${SR}` } })
+    // Try hash-based lookup first (new secure storage)
+    const keyHash = hashApiKey(key)
+    let r = await fetch(`${SUP_URL}/rest/v1/api_keys?or=(key.eq.${encodeURIComponent(key)},key_hash.eq.${encodeURIComponent(keyHash)})&select=id,key_hash`, { headers: { apikey: SR, Authorization: `Bearer ${SR}` } })
     const rows = await r.json()
     valid = Array.isArray(rows) && rows.length > 0
     if (valid) {
@@ -74,14 +75,14 @@ export default async function handler(req, res) {
     }
   } catch { valid = false }
   if (!valid) {
-    setCORS(res); res.statusCode = 401; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Invalid NRVS API key.' })); return
+    setPublicCORS(res); res.statusCode = 401; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Invalid NRVS API key.' })); return
   }
 
   // ── parse body ──
   const body = await readJson(req).catch(() => ({}))
   const messages = Array.isArray(body?.messages) ? body.messages : []
   if (!messages.length) {
-    setCORS(res); res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'messages[] is required' })); return
+    setPublicCORS(res); res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'messages[] is required' })); return
   }
   const model = body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
   const wantStream = !!body?.stream
@@ -89,9 +90,9 @@ export default async function handler(req, res) {
   // ── hardcoded origin lore ──
   if (shouldAnswerOrigin(messages)) {
     if (wantStream) {
-      setCORS(res); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.write(ORIGIN_STORY); res.end()
+      setPublicCORS(res); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.write(ORIGIN_STORY); res.end()
     } else {
-      setCORS(res); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(openAIShape(model, ORIGIN_STORY)))
+      setPublicCORS(res); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(openAIShape(model, ORIGIN_STORY)))
     }
     return
   }
@@ -100,7 +101,7 @@ export default async function handler(req, res) {
   const apiKey = process.env.OPENAI_API_KEY
   const baseURL = process.env.OPENAI_BASE_URL || DEFAULT_BASE
   if (!apiKey) {
-    setCORS(res); res.statusCode = 503; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Model backend not configured.' })); return
+    setPublicCORS(res); res.statusCode = 503; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Model backend not configured.' })); return
   }
 
   try {
@@ -114,7 +115,7 @@ export default async function handler(req, res) {
         )
         if (continued.trim()) full += '\n\n' + continued.trim()
       }
-      setCORS(res); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.write(full); res.end(); return
+      setPublicCORS(res); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.write(full); res.end(); return
     }
 
     // Non-streaming
@@ -144,9 +145,9 @@ export default async function handler(req, res) {
       const extra = d2?.choices?.[0]?.message?.content || ''
       if (extra.trim()) text += '\n\n' + extra.trim()
     }
-    setCORS(res); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(openAIShape(model, text)))
+    setPublicCORS(res); res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(openAIShape(model, text)))
   } catch (e) {
-    setCORS(res); res.statusCode = 502; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Upstream model error.' }))
+    setPublicCORS(res); res.statusCode = 502; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Upstream model error.' }))
   }
 }
 

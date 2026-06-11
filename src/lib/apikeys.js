@@ -44,6 +44,8 @@ export async function initApiKeysForUser(id) {
 }
 
 // Create a key. Returns the full key string (shown once).
+// SECURITY: The raw key is stored in `key` column for backward compatibility
+// but the UI only shows the last 4 chars after creation.
 export async function createApiKey(name = 'API key') {
   if (!userId || !isCloudEnabled) {
     throw new Error('Sign in to generate an API key.')

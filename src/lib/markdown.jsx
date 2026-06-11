@@ -64,10 +64,13 @@ function renderInline(text, keyPrefix = 'i') {
     } else if (token.startsWith('[')) {
       const lm = token.match(/\[([^\]]+)\]\(([^)]+)\)/)
       if (lm) {
+        // SECURITY: Only allow safe URL schemes to prevent javascript: XSS
+        const url = lm[2].trim()
+        const safeUrl = /^(https?:\/\/|mailto:|#|\/)/i.test(url) ? url : ''
         nodes.push(
           <a
             key={key}
-            href={lm[2]}
+            href={safeUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-accent-blue underline-offset-2 hover:underline"

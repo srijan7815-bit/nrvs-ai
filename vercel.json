@@ -10,7 +10,27 @@
     "api/flow.js": { "maxDuration": 60 },
     "api/flow-exec.js": { "maxDuration": 60 },
     "api/site.js": { "maxDuration": 60 },
-    "api/memory-extract.js": { "maxDuration": 30 }
+    "api/memory-extract.js": { "maxDuration": 30 },
+    "api/share/[id].js": { "maxDuration": 10 }
   },
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/((?!api/|robots\\.txt|sitemap\\.xml|manifest\\.json|\\.well-known/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Resource-Policy", "value": "same-origin" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://avatars.githubusercontent.com; connect-src 'self' https://zxdcuudocgbgdczigfyv.supabase.co https://integrate.api.nvidia.com https://api.tavily.com https://fuishan.vercel.app; frame-src https://*.e2b.dev https://e2b.dev; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
+        }
+      ]
+    }
+  ]
 }

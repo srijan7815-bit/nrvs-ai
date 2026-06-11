@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /share/
+
+Sitemap: https://nrvs-chat.vercel.app/sitemap.xml

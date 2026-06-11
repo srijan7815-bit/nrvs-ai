@@ -1,0 +1,16 @@
+{
+  "name": "NRVS AI",
+  "short_name": "NRVS",
+  "description": "Your capable AI assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F0F0F",
+  "theme_color": "#0F0F0F",
+  "icons": [
+    {
+      "src": "/nrvs-mark.png",
+      "sizes": "any",
+      "type": "image/png"
+    }
+  ]
+}

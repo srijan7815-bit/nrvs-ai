@@ -141,15 +141,17 @@ export async function deleteShare(id) {
 }
 
 // Public fetch (no auth) for the /share/:id page.
+// SECURITY: Uses the server-side /api/share/:id endpoint instead of querying
+// Supabase directly, so the anon key cannot enumerate shared chats.
 export async function fetchSharedChat(id) {
   if (isCloudEnabled) {
-    const { data, error } = await supabase
-      .from('shared_chats')
-      .select('title,mode,snapshot')
-      .eq('id', id)
-      .maybeSingle()
-    if (error || !data) return null
-    return { title: data.title, messages: data.snapshot?.messages || [] }
+    try {
+      const res = await fetch(`/api/share/${id}`)
+      if (!res.ok) return null
+      return await res.json()
+    } catch {
+      return null
+    }
   }
   // guest/local fallback
   const local = loadLocal().find((s) => s.id === id)

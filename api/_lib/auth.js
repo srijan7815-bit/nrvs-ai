@@ -3,19 +3,52 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-// ── Always-allowed CORS headers for public API routes ──
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+// ── CORS headers — restricted to known NRVS origins ──
+const ALLOWED_ORIGINS = [
+  'https://nrvs-chat.vercel.app',
+  'https://nrvs.ai',
+  'https://www.nrvs.ai',
+  'http://localhost:5173', // dev
+  'http://localhost:3000', // dev
+]
+
+// The /api/v1/chat endpoint is a public developer API — keep wildcard CORS for that.
+const PUBLIC_API_ORIGINS = '*'
+
+const CORS_HEADERS_BASE = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-api-key, X-API-Key',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Max-Age': '86400',
 }
 
 /**
- * Attach CORS headers to a Vercel response object.
+ * Determine the allowed origin from the request's Origin header.
+ * Returns the origin string if allowed, or null.
  */
-export function setCORS(res) {
-  for (const [key, val] of Object.entries(CORS_HEADERS)) {
+function getAllowedOrigin(req) {
+  const origin = req.headers?.origin || req.headers?.get?.('origin') || ''
+  if (ALLOWED_ORIGINS.includes(origin)) return origin
+  return null
+}
+
+/**
+ * Attach CORS headers to a Vercel response object.
+ * Restricts Access-Control-Allow-Origin to known NRVS origins.
+ */
+export function setCORS(res, req) {
+  const origin = req ? getAllowedOrigin(req) : null
+  res.setHeader('Access-Control-Allow-Origin', origin || 'https://nrvs-chat.vercel.app')
+  for (const [key, val] of Object.entries(CORS_HEADERS_BASE)) {
+    res.setHeader(key, val)
+  }
+}
+
+/**
+ * Set public (wildcard) CORS — only for the developer API (/api/v1/chat).
+ */
+export function setPublicCORS(res) {
+  res.setHeader('Access-Control-Allow-Origin', PUBLIC_API_ORIGINS)
+  for (const [key, val] of Object.entries(CORS_HEADERS_BASE)) {
     res.setHeader(key, val)
   }
 }
@@ -102,4 +135,31 @@ export function handleCORS(res, err) {
     return true
   }
   return false
+}
+
+/**
+ * Parse JSON body from a Vercel request.
+ * Enforces a max body size to prevent oversized payload attacks.
+ */
+export function parseBody(req, maxBytes = 512 * 1024) {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > maxBytes) {
+        reject({ status: 413, body: { error: 'Request body too large.' } })
+        return
+      }
+      data += c
+    })
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(data || '{}'))
+      } catch (e) {
+        reject({ status: 400, body: { error: 'Invalid JSON body.' } })
+      }
+    })
+    req.on('error', () => resolve({}))
+  })
 }

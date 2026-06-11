@@ -191,7 +191,7 @@ export default function ArtifactViewer() {
                   title="artifact-preview"
                   src={liveUrl || undefined}
                   srcDoc={liveUrl ? undefined : html}
-                  sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
+                  sandbox="allow-scripts allow-forms allow-popups"
                   className="h-full w-full bg-white"
                 />
               ) : files.length > 1 ? (

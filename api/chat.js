@@ -89,13 +89,13 @@ export default async function handler(req, res) {
   try {
     await requireAuth(req)
   } catch (err) {
-    if (err?.cors) { setCORS(res); res.statusCode = 204; res.end(); return }
+    if (err?.cors) { setCORS(res, req); res.statusCode = 204; res.end(); return }
     sendError(res, err.status || 401, err.body?.error || 'Unauthorized')
     return
   }
 
   if (req.method !== 'POST') {
-    setCORS(res); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
+    setCORS(res, req); res.statusCode = 405; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Method not allowed' })); return
   }
 
   let body
@@ -114,7 +114,7 @@ export default async function handler(req, res) {
 
   const model = image ? VISION_MODEL : body?.model || process.env.OPENAI_MODEL || DEFAULT_MODEL
 
-  setCORS(res)
+  setCORS(res, req)
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-NRVS-Mode', apiKey ? 'live' : 'demo')
@@ -179,7 +179,7 @@ export default async function handler(req, res) {
     // Final streamed answer with truncation auto-retry
     await streamModelWithRetry(res, baseURL, apiKey, model, convo)
   } catch (err) {
-    setCORS(res); res.write(`\n\n_Error: ${err?.message || 'request failed'}_`)
+    setCORS(res, req); res.write(`\n\n_Error: ${err?.message || 'request failed'}_`)
   }
   res.end()
 }
@@ -323,10 +323,16 @@ function safeToolContent(result) {
   }
 }
 
-function readJson(req) {
+function readJson(req, maxBytes) {
+  maxBytes = maxBytes || 512 * 1024
   return new Promise((resolve, reject) => {
     let data = ''
-    req.on('data', (c) => (data += c))
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > maxBytes) { reject(new Error('Body too large')); return }
+      data += c
+    })
     req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch (e) { reject(e) } })
     req.on('error', () => resolve({}))
   })
