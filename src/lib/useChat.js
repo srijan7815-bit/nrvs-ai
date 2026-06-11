@@ -1,6 +1,6 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { streamChat, extractMemories, generateSite } from './api'
+import { streamChat, extractMemories, generateSite, fetchSuggestions } from './api'
 import {
   addMessage,
   createThread,
@@ -15,6 +15,7 @@ import { getServers } from './mcp'
 import { filesForProject } from './projects'
 import { setBusy, setError, useBusy } from './busy'
 import { getProviderKey } from './providers'
+import { looksTruncated } from './markdown'
 
 // Detect a "build me a website/app/page/landing/site" request.
 const SITE_INTENT =
@@ -32,6 +33,8 @@ const controllers = new Map()
 export function useChat(scopeThreadId) {
   const { busy, error } = useBusy(scopeThreadId)
   const navigate = useNavigate()
+  const [suggestions, setSuggestions] = useState([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
 
   const send = useCallback(
     async (payload, threadIdArg) => {
@@ -40,6 +43,7 @@ export function useChat(scopeThreadId) {
       if (!text && !image && !file) return
 
       setError(null)
+      setSuggestions([])
       let threadId = threadIdArg
 
       // What we show in the bubble vs. what we send to the model.
@@ -173,6 +177,11 @@ export function useChat(scopeThreadId) {
 
           // Auto-memory extraction (fire-and-forget, non-blocking).
           autoRemember(threadId, assistantId)
+
+          // Fetch reply suggestions for complete responses (fire-and-forget)
+          if (!looksTruncated(finalText)) {
+            loadSuggestions(threadId, finalText)
+          }
         } catch (err) {
           if (err.name === 'AbortError') {
             const stopped = acc + '\n\n_(Stopped.)_'
@@ -198,6 +207,130 @@ export function useChat(scopeThreadId) {
     [navigate]
   )
 
+  // Load suggestions in background after a complete response
+  const loadSuggestions = useCallback(
+    async (threadId, _latestContent) => {
+      if (scopeThreadId && scopeThreadId !== threadId) return
+      const t = getThread(threadId)
+      if (!t) return
+      setSuggestionsLoading(true)
+      try {
+        const msgs = t.messages
+          .slice(-8)
+          .map((m) => ({ role: m.role, content: m.content }))
+        const result = await fetchSuggestions(msgs)
+        if (result.length > 0) {
+          setSuggestions(result.map((s) => ({ ...s, threadId })))
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        setSuggestionsLoading(false)
+      }
+    },
+    [scopeThreadId]
+  )
+
+  // Continue an incomplete response by sending "Continue from where you stopped"
+  const continueResponse = useCallback(
+    async (threadId) => {
+      const t = getThread(threadId)
+      if (!t) return
+      setSuggestions([])
+      // Find the last assistant message
+      const lastAssistant = [...t.messages].reverse().find((m) => m.role === 'assistant')
+      if (!lastAssistant) return
+
+      const lastModel = [...t.messages]
+        .reverse()
+        .find((m) => m.role === 'assistant' && m.model)?.model || undefined
+
+      const continueText = `Continue directly from where your previous message ended. Do not repeat anything you already said. Write only the rest of the answer.`
+
+      // Add a user message showing what's happening
+      await addMessage(threadId, {
+        role: 'user',
+        content: '▶ Continue',
+      })
+      const assistantId = await addMessage(threadId, {
+        role: 'assistant',
+        content: '',
+        model: lastModel || null,
+      })
+
+      // Build history: include the truncated assistant response + continue prompt
+      const history = (getThread(threadId)?.messages || [])
+        .filter((m) => m.id !== assistantId)
+        .map((m) => ({ role: m.role, content: m.content }))
+      // Replace the "▶ Continue" with the actual continuation instruction
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === 'user' && history[i].content === '▶ Continue') {
+          history[i] = { role: 'user', content: continueText }
+          break
+        }
+      }
+
+      const memList = getMemories().map((m) => m.content)
+      const mcpList = getServers()
+        .filter((s) => s.enabled)
+        .map((s) => `${s.name} (${s.url})`)
+
+      setBusy(threadId, true)
+      const controller = new AbortController()
+      controllers.set(threadId, controller)
+      let acc = ''
+
+      try {
+        await streamChat({
+          messages: history,
+          model: lastModel,
+          memories: memList,
+          mcpServers: mcpList,
+          signal: controller.signal,
+          onToken: (chunk) => {
+            acc += chunk
+            updateMessage(threadId, assistantId, acc.replace(/^\s+/, ''))
+          },
+          onTool: (evt) => {
+            setMessageTools(threadId, assistantId, [evt])
+          },
+        })
+        acc = acc.replace(/^\s+/, '')
+        const finalText = acc.trim() ? acc : '_(No additional content.)_'
+        updateMessage(threadId, assistantId, finalText)
+        await persistMessageContent(assistantId, finalText)
+
+        // Auto-memory extraction
+        autoRemember(threadId, assistantId)
+
+        // If the continuation is ALSO truncated, don't auto-suggest
+        if (!looksTruncated(finalText)) {
+          loadSuggestions(threadId, finalText)
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          const stopped = acc + '\n\n_(Stopped.)_'
+          updateMessage(threadId, assistantId, stopped)
+          await persistMessageContent(assistantId, stopped)
+        } else {
+          setError(err.message || 'Something went wrong.')
+          const errText = acc + `\n\n_Error: ${err.message || 'request failed'}_`
+          updateMessage(threadId, assistantId, errText)
+          await persistMessageContent(assistantId, errText)
+        }
+      } finally {
+        setBusy(threadId, false)
+        controllers.delete(threadId)
+      }
+    },
+    [navigate]
+  )
+
+  // Clear suggestions when navigating away or sending a new message
+  const clearSuggestions = useCallback(() => {
+    setSuggestions([])
+  }, [])
+
   const stop = useCallback(() => {
     if (scopeThreadId) controllers.get(scopeThreadId)?.abort()
     else controllers.forEach((c) => c.abort())
@@ -215,6 +348,7 @@ export function useChat(scopeThreadId) {
         [...(t?.messages || [])]
           .reverse()
           .find((m) => m.role === 'assistant' && m.model)?.model || undefined
+      setSuggestions([])
       return send({ text: newText, image, model: lastModel }, threadId)
     },
     [send]
@@ -236,6 +370,7 @@ export function useChat(scopeThreadId) {
       const model = t.messages[idx].model || undefined
       // remove the user message + everything after, then resend it
       await truncateFromMessage(threadId, userMsg.id)
+      setSuggestions([])
       return send(
         { text: userMsg.content, image: userMsg.image || null, model },
         threadId
@@ -244,7 +379,7 @@ export function useChat(scopeThreadId) {
     [send]
   )
 
-  return { send, stop, editAndRetry, retry, busy, error }
+  return { send, stop, editAndRetry, retry, continueResponse, suggestions, suggestionsLoading, clearSuggestions, busy, error }
 }
 
 // Look at the latest user+assistant turn and quietly save any durable facts.

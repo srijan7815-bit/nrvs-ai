@@ -8,21 +8,31 @@ import Thinking from '../components/Thinking'
 import ShareDialog from '../components/ShareDialog'
 import LiveMode from '../components/LiveMode'
 import AddToProject from '../components/AddToProject'
+import ContinueButton from '../components/ContinueButton'
+import ReplySuggestions from '../components/ReplySuggestions'
 import { useThread } from '../lib/store'
 import { useChat } from '../lib/useChat'
 import { useFlowLauncher } from '../lib/useFlowLauncher'
 import { syncLiveShares } from '../lib/shares'
+import { looksTruncated } from '../lib/markdown'
 
 export default function Thread() {
   const { id } = useParams()
   const thread = useThread(id)
-  const { send, stop, editAndRetry, retry, busy, error } = useChat(id)
+  const { send, stop, editAndRetry, retry, continueResponse, suggestions, suggestionsLoading, clearSuggestions, busy, error } = useChat(id)
   const { launch, overlay } = useFlowLauncher()
 
   const handleSend = (p) => {
     if (p?.flowState && p.text) return launch(p.text, p.model)
     return send(p, id)
   }
+
+  // Handle suggestion click: send the full prompt, display the short version in composer
+  const handleSuggestionPick = (suggestion) => {
+    // Send with the FULL structured prompt as text, but we'll show short in the bubble
+    send({ text: suggestion.full }, id)
+  }
+
   const bottomRef = useRef(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [live, setLive] = useState(false)
@@ -36,6 +46,21 @@ export default function Thread() {
   const lastHasTools = lastMsg?.tools && lastMsg.tools.length > 0
   const showThinking = busy && lastEmpty && !lastHasTools
 
+  // Detect if the last assistant response is truncated (for continue button)
+  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant')
+  const isLastTruncated =
+    !busy &&
+    lastAssistantMsg &&
+    lastAssistantMsg.content &&
+    looksTruncated(lastAssistantMsg.content)
+
+  // Show suggestions only for the current thread and when response is complete
+  const showSuggestions =
+    !busy &&
+    !isLastTruncated &&
+    suggestions.length > 0 &&
+    suggestions[0]?.threadId === id
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length, busy, lastId])
@@ -44,6 +69,11 @@ export default function Thread() {
   useEffect(() => {
     if (!busy && id) syncLiveShares(id)
   }, [messages.length, busy, id])
+
+  // Clear suggestions when navigating to a different thread
+  useEffect(() => {
+    clearSuggestions()
+  }, [id])
 
   if (!thread) return <Navigate to="/" replace />
 
@@ -110,6 +140,30 @@ export default function Thread() {
               {error}
             </div>
           )}
+
+          {/* Continue button — shown when last response is truncated */}
+          {isLastTruncated && (
+            <div className="max-w-[85%]">
+              <ContinueButton onClick={() => continueResponse(id)} />
+            </div>
+          )}
+
+          {/* Reply suggestions — shown after complete responses */}
+          {showSuggestions && (
+            <div className="max-w-[85%]">
+              <ReplySuggestions
+                suggestions={suggestions}
+                onPick={handleSuggestionPick}
+                loading={false}
+              />
+            </div>
+          )}
+          {suggestionsLoading && (
+            <div className="max-w-[85%]">
+              <ReplySuggestions suggestions={[]} onPick={() => {}} loading={true} />
+            </div>
+          )}
+
           <div ref={bottomRef} />
         </div>
 

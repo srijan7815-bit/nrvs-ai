@@ -143,3 +143,19 @@ export async function serveArtifact(files) {
   const res = await jsonFetch('/api/serve', { files })
   return res.json()
 }
+
+// ── Fetch reply suggestions based on conversation ──
+export async function fetchSuggestions(messages) {
+  try {
+    const res = await jsonFetch('/api/suggest', {
+      messages: messages.slice(-10).map((m) => ({
+        role: m.role,
+        content: String(m.content || '').slice(0, 1500),
+      })),
+    })
+    const data = await res.json()
+    return Array.isArray(data?.suggestions) ? data.suggestions : []
+  } catch {
+    return []
+  }
+}
