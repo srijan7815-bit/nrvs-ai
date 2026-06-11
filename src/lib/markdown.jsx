@@ -1,9 +1,18 @@
 // Comprehensive Markdown -> React renderer (no external deps, no raw HTML injection).
 // Supports: headings, bold, italic, strikethrough, inline code, code blocks (with syntax highlighting),
 // blockquotes, unordered/ordered lists, tables, horizontal rules, links, paragraphs.
-import React from 'react'
+//
+// PERFORMANCE: Uses a simple memoization cache keyed on text content. Since the Markdown
+// component receives the same text string (growing during streaming) and re-renders on every
+// updateMessage() call, this prevents expensive re-parsing when the text hasn't actually changed.
+import React, { useMemo } from 'react'
 import CodeBlock from '../components/CodeBlock'
 import { highlight } from './highlight'
+
+// Simple LRU-style cache for parsed markdown output (max 8 entries).
+// Key = text string, Value = rendered React elements.
+const mdCache = new Map()
+const MD_CACHE_MAX = 8
 
 // ── Inline token renderer ──────────────────────────────────────
 
@@ -202,6 +211,27 @@ function renderTable(tableText, tableKey) {
 
 export default function Markdown({ text }) {
   if (!text) return null
+
+  // Memoize the full render — only re-parse when text actually changes.
+  // The throttled updates in useChat (80ms) mean this runs at most ~12x/sec
+  // instead of hundreds of times per second.
+  return useMemo(() => {
+    // Check cache
+    if (mdCache.has(text)) return mdCache.get(text)
+
+    const result = renderMarkdown(text)
+
+    // Cache management
+    if (mdCache.size >= MD_CACHE_MAX) {
+      const firstKey = mdCache.keys().next().value
+      mdCache.delete(firstKey)
+    }
+    mdCache.set(text, result)
+    return result
+  }, [text])
+}
+
+function renderMarkdown(text) {
 
   // ── Split text into table and non-table parts ────────────────────
   const parts = []

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { streamChat, extractMemories, generateSite, fetchSuggestions } from './api'
 import {
@@ -112,6 +112,43 @@ export function useChat(scopeThreadId) {
         let acc = ''
         const toolEvents = []
 
+        // ── Throttled update mechanism ──
+        // Instead of calling updateMessage() on every token (causing hundreds
+        // of React re-renders per second), we batch tokens and flush them at
+        // ~100ms intervals. This dramatically reduces device load.
+        let pendingText = ''
+        let flushTimer = null
+        const FLUSH_INTERVAL = 80 // ms — smooth enough for UX, light on CPU
+
+        const flushUpdate = () => {
+          if (!pendingText) return
+          acc += pendingText
+          pendingText = ''
+          updateMessage(threadId, assistantId, acc.replace(/^\s+/, ''))
+        }
+
+        const throttledToken = (chunk) => {
+          pendingText += chunk
+          if (!flushTimer) {
+            flushTimer = setTimeout(() => {
+              flushTimer = null
+              flushUpdate()
+            }, FLUSH_INTERVAL)
+          }
+        }
+
+        // Reasoning tokens are shown as a lightweight "Thinking…" indicator
+        // without re-rendering the whole message — avoids lag on long reasoning.
+        let reasoningText = ''
+        const handleReasoning = (text) => {
+          reasoningText += text
+          // Just update the message with current acc + a thinking hint,
+          // but only if we haven't started emitting real content yet.
+          if (!acc && !pendingText) {
+            updateMessage(threadId, assistantId, '')
+          }
+        }
+
         // ── Website build path: use FUISHAN (if Google key) or rich native gen ──
         const isSiteBuild = SITE_INTENT.test(displayText || '')
         if (isSiteBuild) {
@@ -160,16 +197,16 @@ export function useChat(scopeThreadId) {
             memories: memList,
             mcpServers: mcpList,
             signal: controller.signal,
-            onToken: (chunk) => {
-              acc += chunk
-              // trim the leading keep-alive whitespace so it never shows
-              updateMessage(threadId, assistantId, acc.replace(/^\s+/, ''))
-            },
+            onToken: throttledToken,
+            onReasoning: handleReasoning,
             onTool: (evt) => {
               toolEvents.push(evt)
               setMessageTools(threadId, assistantId, [...toolEvents])
             },
           })
+          // Flush any remaining buffered tokens
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+          flushUpdate()
           acc = acc.replace(/^\s+/, '')
           const finalText = acc.trim() ? acc : '_(No response received.)_'
           updateMessage(threadId, assistantId, finalText)
@@ -280,6 +317,23 @@ export function useChat(scopeThreadId) {
       controllers.set(threadId, controller)
       let acc = ''
 
+      // Throttled updates for continue as well
+      let pendingText = ''
+      let flushTimer = null
+      const FLUSH_INTERVAL = 80
+      const flushUpdate = () => {
+        if (!pendingText) return
+        acc += pendingText
+        pendingText = ''
+        updateMessage(threadId, assistantId, acc.replace(/^\s+/, ''))
+      }
+      const throttledToken = (chunk) => {
+        pendingText += chunk
+        if (!flushTimer) {
+          flushTimer = setTimeout(() => { flushTimer = null; flushUpdate() }, FLUSH_INTERVAL)
+        }
+      }
+
       try {
         await streamChat({
           messages: history,
@@ -287,14 +341,15 @@ export function useChat(scopeThreadId) {
           memories: memList,
           mcpServers: mcpList,
           signal: controller.signal,
-          onToken: (chunk) => {
-            acc += chunk
-            updateMessage(threadId, assistantId, acc.replace(/^\s+/, ''))
-          },
+          onToken: throttledToken,
+          onReasoning: () => {}, // reasoning during continue — ignore silently
           onTool: (evt) => {
             setMessageTools(threadId, assistantId, [evt])
           },
         })
+        // Flush remaining
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null }
+        flushUpdate()
         acc = acc.replace(/^\s+/, '')
         const finalText = acc.trim() ? acc : '_(No additional content.)_'
         updateMessage(threadId, assistantId, finalText)

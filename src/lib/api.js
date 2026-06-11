@@ -5,6 +5,7 @@
 import { supabase } from './supabase'
 
 const TOOL_MARKER = '\u0000NRVS_TOOL:'
+const REASONING_MARKER = '\u0001NRVS_THINK:'
 
 // ── Internal: get the current Supabase session token ──
 async function getAuthHeader() {
@@ -14,7 +15,7 @@ async function getAuthHeader() {
 }
 
 // ── Internal: make a streaming fetch with auth header ──
-async function streamFetch(url, body, { onToken, onTool, signal } = {}) {
+async function streamFetch(url, body, { onToken, onTool, onReasoning, signal } = {}) {
   const authHeader = await getAuthHeader()
   const headers = { 'Content-Type': 'application/json' }
   if (authHeader) headers['Authorization'] = authHeader
@@ -47,18 +48,25 @@ async function streamFetch(url, body, { onToken, onTool, signal } = {}) {
       if (line.startsWith(TOOL_MARKER)) {
         try { onTool?.(JSON.parse(line.slice(TOOL_MARKER.length))) } catch { /* ignore */ }
         buffer = buffer.slice(nl + 1)
+      } else if (line.startsWith(REASONING_MARKER)) {
+        try {
+          const parsed = JSON.parse(line.slice(REASONING_MARKER.length))
+          if (parsed.text) onReasoning?.(parsed.text)
+        } catch { /* ignore */ }
+        buffer = buffer.slice(nl + 1)
       } else {
         const chunk = buffer.slice(0, nl + 1)
         onToken?.(chunk)
         buffer = buffer.slice(nl + 1)
       }
     }
-    if (buffer && buffer[0] !== '\u0000') {
+    // Handle partial buffer — only send if it's not a control marker prefix
+    if (buffer && buffer[0] !== '\u0000' && buffer[0] !== '\u0001') {
       onToken?.(buffer)
       buffer = ''
     }
   }
-  if (buffer && buffer[0] !== '\u0000') onToken?.(buffer)
+  if (buffer && buffer[0] !== '\u0000' && buffer[0] !== '\u0001') onToken?.(buffer)
 }
 
 // ── Internal: non-streaming POST with auth header ──
@@ -72,11 +80,12 @@ async function jsonFetch(url, body) {
 }
 
 // ── Chat: streaming with tool callbacks ──
-export async function streamChat({ messages, model, image, memories, mcpServers, onToken, onTool, signal }) {
+export async function streamChat({ messages, model, image, memories, mcpServers, onToken, onTool, onReasoning, signal }) {
   let full = ''
   await streamFetch('/api/chat', { messages, model, image, memories, mcpServers }, {
     onToken: (chunk) => { full += chunk; onToken?.(chunk) },
     onTool,
+    onReasoning,
     signal,
   })
   const mode = 'live' // server sets X-NRVS-Mode header

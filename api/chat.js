@@ -18,6 +18,7 @@ const DEFAULT_BASE = 'https://integrate.api.nvidia.com/v1'
 const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct'
 const VISION_MODEL = 'meta/llama-3.2-11b-vision-instruct'
 const TOOL_MARKER = '\u0000NRVS_TOOL:'
+const REASONING_MARKER = '\u0001NRVS_THINK:' // sent to client for live thinking indicator
 // Max tokens for streaming — generous to reduce truncation
 const STREAM_MAX_TOKENS = 8192
 // Max tokens for non-streaming calls
@@ -219,12 +220,16 @@ async function streamToBuffer(res, baseURL, apiKey, model, messages, maxTokens) 
   let emitted = false
   let reasoningBuf = ''
   let finalContent = ''
+  let reasoningFlushed = 0 // bytes of reasoning already sent to client
 
   const finish = () => {
+    // If the model only produced reasoning (no content), use the reasoning
+    // as the final answer — but cap it to avoid dumping massive text.
     if (!emitted && reasoningBuf.trim()) {
       const cleaned = reasoningBuf.split(/\n\n+/).filter(Boolean).slice(-1)[0] || reasoningBuf
-      finalContent += cleaned.trim()
-      res.write(cleaned.trim())
+      const trimmed = cleaned.trim().slice(0, 4000)
+      finalContent += trimmed
+      res.write(trimmed)
       emitted = true
     }
   }
@@ -251,8 +256,24 @@ async function streamToBuffer(res, baseURL, apiKey, model, messages, maxTokens) 
           res.write(content)
         } else if (reasoning) {
           reasoningBuf += reasoning
+          // Stream reasoning to client incrementally so the UI stays responsive.
+          // Send in batches (~64 chars) to avoid flooding with per-token writes.
+          const pending = reasoningBuf.length - reasoningFlushed
+          if (pending >= 64) {
+            const chunk = reasoningBuf.slice(reasoningFlushed)
+            reasoningFlushed = reasoningBuf.length
+            res.write(REASONING_MARKER + JSON.stringify({ text: chunk }) + '\n')
+            if (typeof res.flush === 'function') res.flush()
+          }
         }
       } catch { /* ignore partials */ }
+    }
+  }
+  // Flush any remaining reasoning
+  if (!emitted && reasoningBuf.length > reasoningFlushed) {
+    const remaining = reasoningBuf.slice(reasoningFlushed).trim().slice(0, 4000)
+    if (remaining) {
+      res.write(REASONING_MARKER + JSON.stringify({ text: remaining, done: true }) + '\n')
     }
   }
   finish()
